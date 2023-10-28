@@ -1,0 +1,69 @@
+import { Context, Service, z } from 'koishi'
+import { resolve } from 'path'
+import { mkdir } from 'fs/promises'
+import { DataService } from '@koishijs/console'
+
+declare module 'koishi' {
+  interface Context {
+    fonts: Fonts
+  }
+}
+
+declare module '@koishijs/console' {
+  namespace Console {
+    interface Services {
+      fonts: FontsProvider
+    }
+  }
+}
+
+class FontsProvider extends DataService<unknown[]> {
+  constructor(ctx: Context, private fonts: Fonts) {
+    super(ctx, 'fonts')
+  }
+
+  async get() {
+    return this.fonts.list()
+  }
+}
+
+class Fonts extends Service {
+  private root: string
+
+  constructor(ctx: Context, public config: Fonts.Config) {
+    super(ctx, 'fonts', true)
+    ctx.plugin(FontsProvider, this)
+  }
+
+  async start() {
+    this.root = resolve(this.ctx.baseDir, this.config.root)
+    await mkdir(this.root, { recursive: true })
+  }
+
+  list() {
+    return []
+  }
+
+  register(name: string, paths: string[]) {
+    this.logger.info('register', name, paths)
+  }
+
+  download(name: string, url: string) {
+    this.logger.info('download', name, url)
+  }
+}
+
+namespace Fonts {
+  export interface Config {
+    root: string
+  }
+
+  export const Config: z<Config> = z.object({
+    root: z.path({
+      filters: ['directory'],
+      allowCreate: true,
+    }).default('data/fonts').description('存放字体的目录。'),
+  })
+}
+
+export default Fonts
