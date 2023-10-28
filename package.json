@@ -1,0 +1,63 @@
+{
+  "name": "koishi-plugin-fonts",
+  "description": "Font Manager for Koishi",
+  "version": "1.0.0",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "dist"
+  ],
+  "author": "Shigma <shigma10826@gmail.com>",
+  "scripts": {
+    "build": "tsc -b && koishi-console build"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/koishijs/koishi-plugin-fonts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/koishijs/koishi-plugin-fonts/issues"
+  },
+  "homepage": "https://github.com/koishijs/koishi-plugin-fonts",
+  "keywords": [
+    "bot",
+    "chatbot",
+    "koishi",
+    "plugin",
+    "font",
+    "storage",
+    "text"
+  ],
+  "koishi": {
+    "description": {
+      "en": "Font Manager for Koishi",
+      "zh": "适用于 Koishi 的字体管理器"
+    },
+    "services": {
+      "optional": [
+        "console"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "koishi": "^4.15.3"
+  },
+  "devDependencies": {
+    "@koishijs/client": "^5.17.1",
+    "@koishijs/console": "^5.17.1",
+    "@koishijs/eslint-config": "^1.0.4",
+    "@types/node": "^20.4.2",
+    "@types/throttle-debounce": "^2.1.0",
+    "esbuild": "^0.18.14",
+    "esbuild-register": "^3.4.2",
+    "eslint": "^8.45.0",
+    "koishi": "^4.15.3",
+    "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "throttle-debounce": "^3.0.1"
+  }
+}
