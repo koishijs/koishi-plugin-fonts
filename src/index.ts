@@ -25,11 +25,19 @@ declare module '@koishijs/console' {
   }
 }
 
+interface Font {
+  name: string
+  paths: string[]
+  size: number
+}
+
 class FontsProvider extends DataService<unknown[]> {
   constructor(ctx: Context, private fonts: Fonts) {
     super(ctx, 'fonts')
 
+    // @ts-ignore
     ctx.on('fonts/register', this.fonts.register)
+    // @ts-ignore
     ctx.on('fonts/download', this.fonts.download)
 
     ctx.console.addEntry(process.env.KOISHI_BASE ? [
@@ -42,7 +50,7 @@ class FontsProvider extends DataService<unknown[]> {
   }
 
   async get() {
-    return this.fonts.list()
+    return await this.fonts.list()
   }
 }
 
@@ -59,7 +67,7 @@ class Fonts extends Service {
     await mkdir(this.root, { recursive: true })
   }
 
-  list() {
+  async list(): Promise<Font[]> {
     return []
   }
 
