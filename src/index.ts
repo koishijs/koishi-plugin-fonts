@@ -1,6 +1,9 @@
 import { Context, Service, z } from 'koishi'
 import { resolve } from 'path'
+import { createWriteStream } from 'fs'
 import { mkdir } from 'fs/promises'
+import { finished, Readable } from 'stream'
+import { promisify } from 'util'
 import { DataService } from '@koishijs/console'
 
 declare module 'koishi' {
@@ -15,11 +18,19 @@ declare module '@koishijs/console' {
       fonts: FontsProvider
     }
   }
+
+  interface Events {
+    'fonts/register'(name: string, paths: string[]): void
+    'fonts/download'(name: string, url: string): void
+  }
 }
 
 class FontsProvider extends DataService<unknown[]> {
   constructor(ctx: Context, private fonts: Fonts) {
     super(ctx, 'fonts')
+
+    ctx.on('fonts/register', this.fonts.register)
+    ctx.on('fonts/download', this.fonts.download)
 
     ctx.console.addEntry(process.env.KOISHI_BASE ? [
       process.env.KOISHI_BASE + '/dist/index.js',
@@ -56,8 +67,12 @@ class Fonts extends Service {
     this.logger.info('register', name, paths)
   }
 
-  download(name: string, url: string) {
+  async download(name: string, url: string) {
     this.logger.info('download', name, url)
+    const stream = await this.ctx.http.get(url, { responseType: 'stream' }) as Readable
+    const path = resolve(this.root, name)
+    stream.pipe(createWriteStream(path))
+    return promisify(finished)(stream)
   }
 }
 
