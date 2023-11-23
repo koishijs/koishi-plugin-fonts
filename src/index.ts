@@ -20,6 +20,14 @@ declare module '@koishijs/console' {
 class FontsProvider extends DataService<unknown[]> {
   constructor(ctx: Context, private fonts: Fonts) {
     super(ctx, 'fonts')
+
+    ctx.console.addEntry(process.env.KOISHI_BASE ? [
+      process.env.KOISHI_BASE + '/dist/index.js',
+      process.env.KOISHI_BASE + '/dist/style.css',
+    ] : {
+      dev: resolve(__dirname, '../client/index.ts'),
+      prod: resolve(__dirname, '../dist'),
+    })
   }
 
   async get() {
