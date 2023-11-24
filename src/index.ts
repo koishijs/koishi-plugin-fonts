@@ -35,9 +35,6 @@ class FontsProvider extends DataService<unknown[]> {
   constructor(ctx: Context, private fonts: Fonts) {
     super(ctx, 'fonts')
 
-    ctx.on('fonts/register', this.fonts.register)
-    ctx.on('fonts/download', this.fonts.download)
-
     ctx.console.addEntry(process.env.KOISHI_BASE ? [
       process.env.KOISHI_BASE + '/dist/index.js',
       process.env.KOISHI_BASE + '/dist/style.css',
@@ -45,6 +42,9 @@ class FontsProvider extends DataService<unknown[]> {
       dev: resolve(__dirname, '../client/index.ts'),
       prod: resolve(__dirname, '../dist'),
     })
+
+    ctx.console.addListener('fonts/register', this.fonts.register)
+    ctx.console.addListener('fonts/download', this.fonts.download)
   }
 
   async get() {
