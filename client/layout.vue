@@ -29,6 +29,8 @@
 import { store } from '@koishijs/client'
 import { ref } from 'vue'
 
+import type {} from '..'
+
 const keyword = ref('')
 
 const fonts = store.fonts.filter((font) => {

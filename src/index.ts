@@ -31,7 +31,7 @@ interface Font {
   size: number
 }
 
-class FontsProvider extends DataService<unknown[]> {
+class FontsProvider extends DataService<Font[]> {
   constructor(ctx: Context, private fonts: Fonts) {
     super(ctx, 'fonts')
 
