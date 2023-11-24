@@ -10,7 +10,8 @@
   ],
   "author": "Shigma <shigma10826@gmail.com>",
   "scripts": {
-    "build": "tsc -b && koishi-console build"
+    "build": "tsc -b && koishi-console build",
+    "lint": "eslint ."
   },
   "license": "MIT",
   "repository": {
