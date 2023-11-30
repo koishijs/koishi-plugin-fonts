@@ -9,6 +9,13 @@
     "dist"
   ],
   "author": "Shigma <shigma10826@gmail.com>",
+  "maintainers": [
+    {
+      "name": "Maiko Tan",
+      "email": "maiko.tan.coding@gmail.com",
+      "url": "https://github.com/MaikoTan"
+    }
+  ],
   "scripts": {
     "build": "tsc -b && koishi-console build",
     "lint": "eslint . --ext .ts,.vue"
