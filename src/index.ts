@@ -10,6 +10,10 @@ declare module 'koishi' {
   interface Context {
     fonts: Fonts
   }
+
+  interface Tables {
+    fonts: Font[]
+  }
 }
 
 declare module '@koishijs/console' {
@@ -53,6 +57,8 @@ class FontsProvider extends DataService<Font[]> {
 }
 
 class Fonts extends Service {
+  static inject = ['database']
+
   private root: string
 
   constructor(ctx: Context, public config: Fonts.Config) {
