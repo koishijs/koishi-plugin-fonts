@@ -6,6 +6,7 @@ import { Readable } from 'stream'
 
 import { DataService } from '@koishijs/console'
 import { Context, Service, z } from 'koishi'
+import sanitize from 'sanitize-filename'
 
 declare module 'koishi' {
   interface Context {
@@ -96,7 +97,7 @@ class Fonts extends Service {
     this.logger.info('download', name, url)
     const { data, headers } = await this.ctx.http.axios<Readable>({ url, responseType: 'arraybuffer' })
     const hash = createHash('sha256')
-    const tempFilePath = resolve(this.root, name + `.${Date.now()}.tmp`)
+    const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
     const output = createWriteStream(tempFilePath)
 
     // resolve file name from headers.

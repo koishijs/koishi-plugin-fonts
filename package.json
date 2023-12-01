@@ -60,6 +60,7 @@
   "dependencies": {
     "@koishijs/console": "^5.17.1",
     "chokidar": "^3.5.3",
+    "sanitize-filename": "^1.6.3",
     "throttle-debounce": "^3.0.1"
   }
 }
