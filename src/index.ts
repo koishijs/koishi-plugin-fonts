@@ -1,10 +1,11 @@
-import { Context, Service, z } from 'koishi'
-import { resolve } from 'path'
+import { createHash } from 'crypto'
 import { createWriteStream } from 'fs'
-import { mkdir } from 'fs/promises'
-import { finished, Readable } from 'stream'
-import { promisify } from 'util'
+import { mkdir, rename } from 'fs/promises'
+import { resolve } from 'path'
+import { Readable } from 'stream'
+
 import { DataService } from '@koishijs/console'
+import { Context, Service, z } from 'koishi'
 
 declare module 'koishi' {
   interface Context {
@@ -33,19 +34,22 @@ interface Font {
   name: string
   paths: string[]
   size: number
+  createdTime: Date
+  updatedTime: Date
 }
 
 class FontsProvider extends DataService<Font[]> {
   constructor(ctx: Context, private fonts: Fonts) {
     super(ctx, 'fonts')
 
-    ctx.console.addEntry(process.env.KOISHI_BASE ? [
-      process.env.KOISHI_BASE + '/dist/index.js',
-      process.env.KOISHI_BASE + '/dist/style.css',
-    ] : {
-      dev: resolve(__dirname, '../client/index.ts'),
-      prod: resolve(__dirname, '../dist'),
-    })
+    ctx.console.addEntry(
+      process.env.KOISHI_BASE
+        ? [process.env.KOISHI_BASE + '/dist/index.js', process.env.KOISHI_BASE + '/dist/style.css']
+        : {
+          dev: resolve(__dirname, '../client/index.ts'),
+          prod: resolve(__dirname, '../dist'),
+        },
+    )
 
     ctx.console.addListener('fonts/register', this.fonts.register)
     ctx.console.addListener('fonts/download', this.fonts.download)
@@ -79,12 +83,64 @@ class Fonts extends Service {
     this.logger.info('register', name, paths)
   }
 
+  /**
+   * @param name the name of the font to be displayed
+   * @param url the url of the font to be downloaded
+   *
+   * @returns the sha256 hash of the downloaded file
+   *
+   * Download a font from the given URL and save it to the `data/fonts` directory.
+   * The file name will be appended with the hash of the file content.
+   */
   async download(name: string, url: string) {
     this.logger.info('download', name, url)
-    const stream = await this.ctx.http.get(url, { responseType: 'stream' }) as Readable
-    const path = resolve(this.root, name)
-    stream.pipe(createWriteStream(path))
-    return promisify(finished)(stream)
+    const { data, headers } = await this.ctx.http.axios<Readable>({ url, responseType: 'arraybuffer' })
+    const hash = createHash('sha256')
+    const tempFilePath = resolve(this.root, name + `.${Date.now()}.tmp`)
+    const output = createWriteStream(tempFilePath)
+
+    // resolve file name from headers.
+    const contentDisposition = headers['content-disposition']
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="(.+)"/)
+      if (match) name = match[1]
+    }
+
+    // in case the filename didn't contains the extension,
+    // resolve file type from header.
+    if (!name.includes('.')) {
+      const contentType = headers['content-type']
+      if (contentType) {
+        if (contentType.includes('font/woff')) {
+          name += '.woff'
+        } else if (contentType.includes('font/woff2')) {
+          name += '.woff2'
+        } else if (contentType.includes('font/ttf')) {
+          name += '.ttf'
+        } else if (contentType.includes('font/otf')) {
+          name += '.otf'
+        } else if (contentType.includes('font/sfnt')) {
+          name += '.sfnt'
+        } else if (contentType.includes('font/collection')) {
+          name += '.ttc'
+        } else {
+          this.logger.warn('unknown font type', contentType)
+        }
+      }
+    }
+
+    data.pipe(hash)
+    data.pipe(output)
+
+    await new Promise<string>((_resolve, reject) => {
+      data.on('error', reject)
+      hash.on('data', (chunk) => hash.update(chunk))
+      hash.on('end', async () => {
+        const sha256 = hash.digest('hex')
+        await rename(tempFilePath, resolve(this.root, name + `.${sha256}`))
+        _resolve(sha256)
+      })
+    })
   }
 }
 
@@ -94,10 +150,13 @@ namespace Fonts {
   }
 
   export const Config: z<Config> = z.object({
-    root: z.path({
-      filters: ['directory'],
-      allowCreate: true,
-    }).default('data/fonts').description('存放字体的目录。'),
+    root: z
+      .path({
+        filters: ['directory'],
+        allowCreate: true,
+      })
+      .default('data/fonts')
+      .description('存放字体的目录。'),
   })
 }
 
