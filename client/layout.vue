@@ -2,33 +2,40 @@
   <k-layout>
     <div class="container">
       <div class="search">
-        <el-input v-model="keyword" placeholder="Type keywords..." #suffix>
+        <el-input v-model="keyword" placeholder="输入关键词搜索…" #suffix>
           <k-icon name="search"></k-icon>
         </el-input>
       </div>
 
       <!-- Download -->
       <template v-if="Object.keys(downloads).length">
-        <el-divider />
         <el-card class="mb-4">
           <template #header>
-            <h4>Downloads</h4>
+            <div class="text-bold">下载中</div>
           </template>
-
-          <template v-for="download in downloads">
-            <div>
-              <span>{{ download.name }}</span>
-            </div>
-            <el-progress :percentage="download.contentLength ? download.downloaded / download.contentLength : 0" />
-          </template>
+          <el-scrollbar class="fonts-list" ref="downloadsRef">
+            <template v-for="download in downloads">
+              <div class="mb-4">
+                <span class="mr-4">{{ download.name }}</span>
+                <!-- TODO: implement cancel feature -->
+                <!-- <el-button @click="cancel(download)">取消</el-button> -->
+              </div>
+              <template v-for="file in download.files">
+                <div>
+                  <el-progress
+                    :percentage="file.contentLength ? (file.downloaded / file.contentLength) * 100 : 0"
+                  />
+                </div>
+              </template>
+            </template>
+          </el-scrollbar>
         </el-card>
       </template>
 
-      <el-divider />
-      <el-scrollbar class="fonts-list" ref="root">
+      <el-scrollbar class="fonts-list" ref="rootRef">
         <el-collapse>
           <template v-for="font in fonts">
-            <el-collapse-item>
+            <el-collapse-item v-show="font.name.includes(keyword)">
               <template #title> {{ font.name }} / {{ font.size }} </template>
 
               <!-- TODO: add more operations -->
@@ -42,18 +49,22 @@
 </template>
 
 <script lang="ts" setup>
-import { store } from '@koishijs/client'
+import { store, send } from '@koishijs/client'
 import { ref } from 'vue'
 
-import type {} from '..'
+import type { } from '..'
 
 const keyword = ref('')
 
-const fonts = store.fonts.fonts.filter((font) => {
-  return font.name.includes(keyword.value)
-})
+const fonts = store.fonts.fonts
 
 const downloads = store.fonts.downloads
+
+type Download = typeof store.fonts.downloads[0]
+
+function cancel(download: Download) {
+  send('fonts/cancel', download.name)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -61,17 +72,19 @@ const downloads = store.fonts.downloads
   max-width: 768px;
   height: 100%;
   margin: 0 auto;
+}
+
+.container * {
   box-sizing: border-box;
 }
 
 .search {
   width: 100%;
-  padding: 20px;
+  padding: 20px 0;
 }
 .fonts-list {
   width: 100%;
   height: 100%;
-  padding: 0 20px 20px 20px;
   overflow: auto;
 }
 </style>

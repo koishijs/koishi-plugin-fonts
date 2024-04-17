@@ -27,7 +27,8 @@ declare module '@koishijs/console' {
 
   interface Events {
     'fonts/register'(name: string, paths: string[]): void
-    'fonts/download'(name: string, url: string): void
+    'fonts/download'(name: string, url: string[]): void
+    'fonts/cancel'(name: string): boolean
   }
 }
 
@@ -55,13 +56,12 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
     )
 
     ctx.console.addListener('fonts/register', this.fonts.register)
-    ctx.console.addListener('fonts/download', async (name, url) => {
+    ctx.console.addListener('fonts/download', async (name, urls) => {
       this.downloads[name] = {
         name,
-        url,
-        contentLength: 0,
-        downloaded: 0,
+        files: urls.map((url) => ({ url, contentLength: 0, downloaded: 0 })),
       }
+      this.fonts.download(name, urls)
     })
   }
 
@@ -76,9 +76,11 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
 namespace FontsProvider {
   export interface Download {
     name: string
-    url: string
-    contentLength: number
-    downloaded: number
+    files: {
+      url: string
+      contentLength: number
+      downloaded: number
+    }[]
   }
 
   export interface Payload {
@@ -110,6 +112,10 @@ class Fonts extends Service {
     this.ctx.logger.info('register', name, paths)
   }
 
+  async download(name: string, urls: string[]) {
+    return await Promise.all(urls.map((url) => this.downloadOne(name, url)))
+  }
+
   /**
    * @param name the name of the font to be displayed
    * @param url the url of the font to be downloaded
@@ -119,8 +125,9 @@ class Fonts extends Service {
    * Download a font from the given URL and save it to the `data/fonts` directory.
    * The file name will be appended with the hash of the file content.
    */
-  async download(name: string, url: string) {
+  async downloadOne(name: string, url: string) {
     this.ctx.logger.info('download', name, url)
+    const currentHandle = this.ctx['console.fonts'].downloads[name].files.find((f) => f.url === url)
     const { data, headers } = await this.ctx.http<Readable>(url, { responseType: 'stream' })
     const hash = createHash('sha256')
     const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
@@ -128,7 +135,7 @@ class Fonts extends Service {
 
     const length = headers['content-length']
     if (length) {
-      this.ctx['console.fonts'].downloads[name].contentLength = +length
+      currentHandle.contentLength = +length
     }
 
     // resolve file name from headers.
@@ -169,7 +176,7 @@ class Fonts extends Service {
       readable.on('error', reject)
       hash.on('data', (chunk) => {
         // update progress
-        this.ctx['console.fonts'].downloads[name].downloaded += chunk.length
+        currentHandle.downloaded += chunk.length
 
         hash.update(chunk)
       })
