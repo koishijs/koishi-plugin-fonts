@@ -7,6 +7,24 @@
         </el-input>
       </div>
 
+      <!-- Download -->
+      <template v-if="Object.keys(downloads).length">
+        <el-divider></el-divider>
+        <el-card class="mb-4">
+          <template #header>
+            <h4>Downloads</h4>
+          </template>
+
+          <template v-for="download in downloads">
+            <div>
+              <span>{{ download.name }}</span>
+            </div>
+            <el-progress :percentage="download.progress"></el-progress>
+          </template>
+        </el-card>
+      </template>
+
+      <el-divider></el-divider>
       <el-scrollbar class="fonts-list" ref="root">
         <el-collapse>
           <template v-for="font in fonts">
@@ -33,9 +51,11 @@ import type {} from '..'
 
 const keyword = ref('')
 
-const fonts = store.fonts.filter((font) => {
+const fonts = store.fonts.fonts.filter((font) => {
   return font.name.includes(keyword.value)
 })
+
+const downloads = store.fonts.downloads
 </script>
 
 <style lang="scss" scoped>

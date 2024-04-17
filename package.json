@@ -43,24 +43,24 @@
     }
   },
   "peerDependencies": {
-    "koishi": "^4.15.3"
+    "koishi": "^4.17.4"
   },
   "devDependencies": {
-    "@koishijs/client": "^5.17.1",
+    "@koishijs/client": "^5.28.2",
     "@koishijs/eslint-config": "^1.0.4",
-    "@koishijs/plugin-console": "^5.17.1",
-    "@types/node": "^20.4.2",
-    "@types/throttle-debounce": "^2.1.0",
-    "esbuild": "^0.18.14",
-    "esbuild-register": "^3.4.2",
-    "eslint": "^8.45.0",
-    "koishi": "^4.15.3",
-    "typescript": "^5.1.6"
+    "@koishijs/plugin-console": "^5.28.2",
+    "@types/node": "^20.12.7",
+    "@types/throttle-debounce": "^5.0.2",
+    "esbuild": "^0.20.2",
+    "esbuild-register": "^3.5.0",
+    "eslint": "^9.0.0",
+    "koishi": "^4.17.4",
+    "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@koishijs/console": "^5.17.1",
-    "chokidar": "^3.5.3",
+    "@koishijs/console": "^5.28.2",
+    "chokidar": "^3.6.0",
     "sanitize-filename": "^1.6.3",
-    "throttle-debounce": "^3.0.1"
+    "throttle-debounce": "^5.0.0"
   }
 }

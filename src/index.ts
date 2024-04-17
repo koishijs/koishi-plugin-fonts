@@ -39,7 +39,9 @@ interface Font {
   updatedTime: Date
 }
 
-class FontsProvider extends DataService<Font[]> {
+class FontsProvider extends DataService<FontsProvider.Payload> {
+  downloads: Record<string, FontsProvider.Download> = {}
+
   constructor(ctx: Context, private fonts: Fonts) {
     super(ctx, 'fonts')
 
@@ -53,11 +55,37 @@ class FontsProvider extends DataService<Font[]> {
     )
 
     ctx.console.addListener('fonts/register', this.fonts.register)
-    ctx.console.addListener('fonts/download', this.fonts.download)
+    ctx.console.addListener('fonts/download', async (name, url) => {
+      this.downloads[name] = {
+        name,
+        url,
+        contentLength: 0,
+        downloaded: 0,
+        progress: 0,
+      }
+    })
   }
 
-  async get() {
-    return await this.fonts.list()
+  async get(): Promise<FontsProvider.Payload> {
+    return {
+      downloads: this.downloads,
+      fonts: await this.fonts.list(),
+    }
+  }
+}
+
+namespace FontsProvider {
+  export interface Download {
+    name: string
+    url: string
+    contentLength: number
+    downloaded: number
+    progress: number
+  }
+
+  export interface Payload {
+    fonts: Font[]
+    downloads?: Record<string, Download>
   }
 }
 
@@ -81,7 +109,7 @@ class Fonts extends Service {
   }
 
   register(name: string, paths: string[]) {
-    this.logger.info('register', name, paths)
+    this.ctx.logger.info('register', name, paths)
   }
 
   /**
@@ -94,8 +122,8 @@ class Fonts extends Service {
    * The file name will be appended with the hash of the file content.
    */
   async download(name: string, url: string) {
-    this.logger.info('download', name, url)
-    const { data, headers } = await this.ctx.http.axios<Readable>({ url, responseType: 'arraybuffer' })
+    this.ctx.logger.info('download', name, url)
+    const { data, headers } = await this.ctx.http<ArrayBuffer>(url, { responseType: 'arraybuffer' })
     const hash = createHash('sha256')
     const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
     const output = createWriteStream(tempFilePath)
@@ -125,16 +153,17 @@ class Fonts extends Service {
         } else if (contentType.includes('font/collection')) {
           name += '.ttc'
         } else {
-          this.logger.warn('unknown font type', contentType)
+          this.ctx.logger.warn('unknown font type', contentType)
         }
       }
     }
 
-    data.pipe(hash)
-    data.pipe(output)
+    const readable = Readable.from(Buffer.from(data))
+    readable.pipe(hash)
+    readable.pipe(output)
 
     await new Promise<string>((_resolve, reject) => {
-      data.on('error', reject)
+      readable.on('error', reject)
       hash.on('data', (chunk) => hash.update(chunk))
       hash.on('end', async () => {
         const sha256 = hash.digest('hex')
