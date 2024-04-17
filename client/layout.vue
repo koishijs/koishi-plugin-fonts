@@ -1,13 +1,25 @@
 <template>
   <k-layout>
     <div class="container">
-      <div class="flex items-center px-4">
+      <div class="my-4 flex items-center px-4">
         <el-input class="flex-1" v-model="keyword" placeholder="输入关键词搜索…" #suffix>
           <k-icon name="search"></k-icon>
         </el-input>
 
-        <el-button>新建下载</el-button>
+        <el-button class="ml-4" @click="showDialog = true">新建下载</el-button>
       </div>
+
+      <el-dialog v-model="showDialog">
+        <template #title>新建下载</template>
+        <template #default>
+          <el-input class="my-2" v-model="newDownload.name" placeholder="输入字体名称" />
+          <el-input class="my-2" v-model="newDownload.urls" placeholder="输入下载链接，以空行分隔不同路径" type="textarea" :autosize="{ minRows: 4, maxRows: 16 }" />
+        </template>
+        <template #footer>
+          <el-button @click="resetNewDownload">取消</el-button>
+          <el-button type="primary" @click="createDownload">确定</el-button>
+        </template>
+      </el-dialog>
 
       <!-- Download -->
       <template v-if="Object.keys(downloads).length">
@@ -35,6 +47,9 @@
       </template>
 
       <el-scrollbar class="fonts-list" ref="rootRef">
+        <template v-if="fonts.length === 0">
+          <el-empty description="暂无字体" />
+        </template>
         <el-collapse>
           <template v-for="font in fonts">
             <el-collapse-item v-show="font.name.includes(keyword)">
@@ -52,14 +67,32 @@
 
 <script lang="ts" setup>
 import { store, send } from '@koishijs/client'
-import { ref } from 'vue'
+import { reactive, ref } from 'vue'
 
+import type { ElDialog } from 'element-plus'
 import type { } from '..'
 
 const keyword = ref('')
 
-const fonts = store.fonts.fonts
+const showDialog = ref(false)
 
+const newDownload = reactive({
+  name: '',
+  urls: '',
+})
+
+function resetNewDownload() {
+  newDownload.name = ''
+  newDownload.urls = ''
+  showDialog.value = false
+}
+
+function createDownload() {
+  send('fonts/download', newDownload.name, newDownload.urls.split('\n'))
+  resetNewDownload()
+}
+
+const fonts = store.fonts.fonts
 const downloads = store.fonts.downloads
 
 type Download = typeof store.fonts.downloads[0]
