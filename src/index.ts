@@ -61,7 +61,6 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
         url,
         contentLength: 0,
         downloaded: 0,
-        progress: 0,
       }
     })
   }
@@ -80,7 +79,6 @@ namespace FontsProvider {
     url: string
     contentLength: number
     downloaded: number
-    progress: number
   }
 
   export interface Payload {
@@ -123,10 +121,15 @@ class Fonts extends Service {
    */
   async download(name: string, url: string) {
     this.ctx.logger.info('download', name, url)
-    const { data, headers } = await this.ctx.http<ArrayBuffer>(url, { responseType: 'arraybuffer' })
+    const { data, headers } = await this.ctx.http<Readable>(url, { responseType: 'stream' })
     const hash = createHash('sha256')
     const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
     const output = createWriteStream(tempFilePath)
+
+    const length = headers['content-length']
+    if (length) {
+      this.ctx['console.fonts'].downloads[name].contentLength = +length
+    }
 
     // resolve file name from headers.
     const contentDisposition = headers['content-disposition']
@@ -158,13 +161,18 @@ class Fonts extends Service {
       }
     }
 
-    const readable = Readable.from(Buffer.from(data))
+    const readable = data
     readable.pipe(hash)
     readable.pipe(output)
 
     await new Promise<string>((_resolve, reject) => {
       readable.on('error', reject)
-      hash.on('data', (chunk) => hash.update(chunk))
+      hash.on('data', (chunk) => {
+        // update progress
+        this.ctx['console.fonts'].downloads[name].downloaded += chunk.length
+
+        hash.update(chunk)
+      })
       hash.on('end', async () => {
         const sha256 = hash.digest('hex')
         await rename(tempFilePath, resolve(this.root, name + `.${sha256}`))

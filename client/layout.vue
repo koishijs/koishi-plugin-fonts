@@ -9,7 +9,7 @@
 
       <!-- Download -->
       <template v-if="Object.keys(downloads).length">
-        <el-divider></el-divider>
+        <el-divider />
         <el-card class="mb-4">
           <template #header>
             <h4>Downloads</h4>
@@ -19,19 +19,17 @@
             <div>
               <span>{{ download.name }}</span>
             </div>
-            <el-progress :percentage="download.progress"></el-progress>
+            <el-progress :percentage="download.contentLength ? download.downloaded / download.contentLength : 0" />
           </template>
         </el-card>
       </template>
 
-      <el-divider></el-divider>
+      <el-divider />
       <el-scrollbar class="fonts-list" ref="root">
         <el-collapse>
           <template v-for="font in fonts">
             <el-collapse-item>
-              <template #title>
-                {{ font.name }} / {{ font.size }}
-              </template>
+              <template #title> {{ font.name }} / {{ font.size }} </template>
 
               <!-- TODO: add more operations -->
               <div>{{ font.paths }}</div>
