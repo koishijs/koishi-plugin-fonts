@@ -1,10 +1,12 @@
 <template>
   <k-layout>
     <div class="container">
-      <div class="search">
-        <el-input v-model="keyword" placeholder="输入关键词搜索…" #suffix>
+      <div class="flex items-center px-4">
+        <el-input class="flex-1" v-model="keyword" placeholder="输入关键词搜索…" #suffix>
           <k-icon name="search"></k-icon>
         </el-input>
+
+        <el-button>新建下载</el-button>
       </div>
 
       <!-- Download -->
@@ -78,10 +80,6 @@ function cancel(download: Download) {
   box-sizing: border-box;
 }
 
-.search {
-  width: 100%;
-  padding: 20px 0;
-}
 .fonts-list {
   width: 100%;
   height: 100%;
