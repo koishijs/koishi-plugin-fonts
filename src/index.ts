@@ -3,6 +3,7 @@ import { createWriteStream } from 'fs'
 import { mkdir, rename } from 'fs/promises'
 import { resolve } from 'path'
 import { Readable } from 'stream'
+import { ReadableStream } from 'stream/web'
 
 import { DataService } from '@koishijs/console'
 import { Context, Service, z } from 'koishi'
@@ -128,7 +129,7 @@ class Fonts extends Service {
   async downloadOne(name: string, url: string) {
     this.ctx.logger.info('download', name, url)
     const currentHandle = this.ctx['console.fonts'].downloads[name].files.find((f) => f.url === url)
-    const { data, headers } = await this.ctx.http<Readable>(url, { responseType: 'stream' })
+    const { data, headers } = await this.ctx.http<ReadableStream>(url, { responseType: 'stream' })
     const hash = createHash('sha256')
     const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
     const output = createWriteStream(tempFilePath)
@@ -168,7 +169,7 @@ class Fonts extends Service {
       }
     }
 
-    const readable = data
+    const readable = Readable.fromWeb(data)
     readable.pipe(hash)
     readable.pipe(output)
 
