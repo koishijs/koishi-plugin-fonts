@@ -130,7 +130,7 @@ class Fonts extends Service {
     this.ctx.logger.info('download', name, url)
     const currentHandle = this.ctx['console.fonts'].downloads[name].files.find((f) => f.url === url)
     const { data, headers } = await this.ctx.http<ReadableStream>(url, { responseType: 'stream' })
-    const hash = createHash('sha256')
+    const hash = createHash('sha256').setEncoding('hex')
     const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
     const output = createWriteStream(tempFilePath)
 
@@ -175,14 +175,12 @@ class Fonts extends Service {
 
     await new Promise<string>((_resolve, reject) => {
       readable.on('error', reject)
-      hash.on('data', (chunk) => {
+      output.on('data', (chunk) => {
         // update progress
         currentHandle.downloaded += chunk.length
-
-        hash.update(chunk)
       })
-      hash.on('end', async () => {
-        const sha256 = hash.digest('hex')
+      hash.on('finish', async () => {
+        const sha256 = hash.read() as string
         await rename(tempFilePath, resolve(this.root, name + `.${sha256}`))
         _resolve(sha256)
       })
