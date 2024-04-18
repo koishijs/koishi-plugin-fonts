@@ -22,13 +22,13 @@
       </el-dialog>
 
       <!-- Download -->
-      <template v-if="Object.keys(downloads).length">
+      <template v-if="Object.keys(store.fonts.downloads).length">
         <el-card class="mb-4">
           <template #header>
             <div class="text-bold">下载中</div>
           </template>
           <el-scrollbar class="fonts-list" ref="downloadsRef">
-            <template v-for="download in downloads">
+            <template v-for="download in store.fonts.downloads">
               <div class="mb-4">
                 <span class="mr-4">{{ download.name }}</span>
                 <!-- TODO: implement cancel feature -->
@@ -47,11 +47,11 @@
       </template>
 
       <el-scrollbar class="fonts-list" ref="rootRef">
-        <template v-if="fonts.length === 0">
+        <template v-if="store.fonts.fonts.length === 0">
           <el-empty description="暂无字体" />
         </template>
         <el-collapse>
-          <template v-for="font in fonts">
+          <template v-for="font in store.fonts.fonts">
             <el-collapse-item v-show="font.name.includes(keyword)">
               <template #title> {{ font.name }} / {{ font.size }} </template>
 
@@ -91,9 +91,6 @@ function createDownload() {
   send('fonts/download', newDownload.name, newDownload.urls.split('\n'))
   resetNewDownload()
 }
-
-const fonts = store.fonts.fonts
-const downloads = store.fonts.downloads
 
 type Download = typeof store.fonts.downloads[0]
 

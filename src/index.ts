@@ -58,11 +58,20 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
 
     ctx.console.addListener('fonts/register', this.fonts.register)
     ctx.console.addListener('fonts/download', async (name, urls) => {
-      this.downloads[name] = {
+      const handle = {
         name,
         files: urls.map((url) => ({ url, contentLength: 0, downloaded: 0 })),
       }
-      this.fonts.download(name, urls)
+      this.downloads[name] = handle
+      this.fonts.download(name, urls, handle)
+      await this.refresh(true)
+      const timer = setInterval(async () => {
+        await this.refresh(true)
+        if (handle.files.every((file) => file.contentLength > 0 && file.downloaded === file.contentLength)) {
+          clearInterval(timer)
+          delete this.downloads[name]
+        }
+      }, 1000)
     })
   }
 
@@ -113,22 +122,22 @@ class Fonts extends Service {
     this.ctx.logger.info('register', name, paths)
   }
 
-  async download(name: string, urls: string[]) {
-    return await Promise.all(urls.map((url) => this.downloadOne(name, url)))
+  async download(name: string, urls: string[], handle: FontsProvider.Download) {
+    return await Promise.all(urls.map((url, index) => this.downloadOne(name, url, handle.files[index])))
   }
 
   /**
    * @param name the name of the font to be displayed
    * @param url the url of the font to be downloaded
+   * @param handle the download handle
    *
    * @returns the sha256 hash of the downloaded file
    *
    * Download a font from the given URL and save it to the `data/fonts` directory.
    * The file name will be appended with the hash of the file content.
    */
-  async downloadOne(name: string, url: string) {
+  async downloadOne(name: string, url: string, handle: FontsProvider.Download['files'][number]) {
     this.ctx.logger.info('download', name, url)
-    const currentHandle = this.ctx['console.fonts'].downloads[name].files.find((f) => f.url === url)
     const { data, headers } = await this.ctx.http<ReadableStream>(url, { responseType: 'stream' })
     const hash = createHash('sha256').setEncoding('hex')
     const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
@@ -136,7 +145,7 @@ class Fonts extends Service {
 
     const length = headers['content-length']
     if (length) {
-      currentHandle.contentLength = +length
+      handle.contentLength = +length
     }
 
     // resolve file name from headers.
@@ -177,7 +186,7 @@ class Fonts extends Service {
       readable.on('error', reject)
       output.on('data', (chunk) => {
         // update progress
-        currentHandle.downloaded += chunk.length
+        handle.downloaded += chunk.length
       })
       hash.on('finish', async () => {
         const sha256 = hash.read() as string
