@@ -5,7 +5,8 @@
     "moduleResolution": "node",
     "jsx": "preserve",
     "types": [
-      "@koishijs/client/global"
+      "@koishijs/client/global",
+      ".."
     ]
   },
   "include": [
