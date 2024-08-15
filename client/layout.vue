@@ -66,7 +66,7 @@
 </template>
 
 <script lang="ts" setup>
-import { store, send } from '@koishijs/client'
+import { send, store } from '@koishijs/client'
 import { reactive, ref } from 'vue'
 
 import type { ElDialog } from 'element-plus'
@@ -94,6 +94,7 @@ function createDownload() {
 
 type Download = typeof store.fonts.downloads[0]
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function cancel(download: Download) {
   send('fonts/cancel', download.name)
 }

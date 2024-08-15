@@ -1,5 +1,4 @@
-extends:
-  - ../
+root: true
 
 parser: vue-eslint-parser
 
@@ -9,3 +8,6 @@ parserOptions:
   sourceType: module
   ecmaFeatures:
     jsx: true
+
+# extends:
+#   - '../.eslintrc.yml'
