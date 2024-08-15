@@ -143,13 +143,13 @@ class Fonts extends Service {
     const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
     const output = createWriteStream(tempFilePath)
 
-    const length = headers['content-length']
+    const length = parseInt(headers.get('content-length'))
     if (length) {
-      handle.contentLength = +length
+      handle.contentLength = length
     }
 
     // resolve file name from headers.
-    const contentDisposition = headers['content-disposition']
+    const contentDisposition = headers.get('content-disposition')
     if (contentDisposition) {
       const match = contentDisposition.match(/filename="(.+)"/)
       if (match) name = match[1]
@@ -184,7 +184,7 @@ class Fonts extends Service {
 
     await new Promise<string>((_resolve, reject) => {
       readable.on('error', reject)
-      output.on('data', (chunk) => {
+      readable.on('data', (chunk) => {
         // update progress
         handle.downloaded += chunk.length
       })
