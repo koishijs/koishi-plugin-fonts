@@ -9,5 +9,5 @@ parserOptions:
   ecmaFeatures:
     jsx: true
 
-# extends:
-#   - '../.eslintrc.yml'
+extends:
+  - '../.eslintrc.yml'
