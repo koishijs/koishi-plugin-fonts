@@ -71,7 +71,11 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
           clearInterval(timer)
           delete this.downloads[name]
         }
-      }, 1000)
+      }, 100)
+    })
+    ctx.console.addListener('fonts/cancel', (name) => {
+      ctx.logger.info('cancel', name)
+      return true
     })
   }
 
@@ -155,24 +159,32 @@ class Fonts extends Service {
       if (match) name = match[1]
     }
 
-    // in case the filename didn't contains the extension,
-    // resolve file type from header.
+    /*
+     * in case the filename didn't contains the extension,
+     * resolve file type from header.
+     */
     if (!name.includes('.')) {
       const contentType = headers['content-type']
       if (contentType) {
         if (contentType.includes('font/woff')) {
           name += '.woff'
-        } else if (contentType.includes('font/woff2')) {
+        }
+        else if (contentType.includes('font/woff2')) {
           name += '.woff2'
-        } else if (contentType.includes('font/ttf')) {
+        }
+        else if (contentType.includes('font/ttf')) {
           name += '.ttf'
-        } else if (contentType.includes('font/otf')) {
+        }
+        else if (contentType.includes('font/otf')) {
           name += '.otf'
-        } else if (contentType.includes('font/sfnt')) {
+        }
+        else if (contentType.includes('font/sfnt')) {
           name += '.sfnt'
-        } else if (contentType.includes('font/collection')) {
+        }
+        else if (contentType.includes('font/collection')) {
           name += '.ttc'
-        } else {
+        }
+        else {
           this.ctx.logger.warn('unknown font type', contentType)
         }
       }

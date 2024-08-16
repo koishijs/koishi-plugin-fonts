@@ -1,6 +1,6 @@
 import { Context } from '@koishijs/client'
+
 import layout from './layout.vue'
-import 'uno.css'
 
 export default (ctx: Context) => {
   ctx.page({

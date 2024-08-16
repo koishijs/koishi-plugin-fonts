@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "tsc -b && koishi-console build",
-    "lint": "eslint . --ext .ts,.vue"
+    "lint": "eslint ."
   },
   "license": "MIT",
   "repository": {
@@ -53,8 +53,8 @@
     "koishi": "^4.17.12"
   },
   "devDependencies": {
+    "@haixee/eslint-config": "^2.1.9",
     "@koishijs/client": "^5.29.3",
-    "@koishijs/eslint-config": "^1.0.4",
     "@koishijs/plugin-console": "^5.29.3",
     "@types/node": "^20.14.15",
     "@types/throttle-debounce": "^5.0.2",

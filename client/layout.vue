@@ -3,7 +3,7 @@
     <div class="container">
       <div class="my-4 flex items-center px-4">
         <el-input class="flex-1" v-model="keyword" placeholder="输入关键词搜索…" #suffix>
-          <k-icon name="search"></k-icon>
+          <k-icon name="search" />
         </el-input>
 
         <el-button class="ml-4" @click="showDialog = true">新建下载</el-button>
@@ -13,7 +13,13 @@
         <template #title>新建下载</template>
         <template #default>
           <el-input class="my-2" v-model="newDownload.name" placeholder="输入字体名称" />
-          <el-input class="my-2" v-model="newDownload.urls" placeholder="输入下载链接，以空行分隔不同路径" type="textarea" :autosize="{ minRows: 4, maxRows: 16 }" />
+          <el-input
+            class="my-2"
+            v-model="newDownload.urls"
+            placeholder="输入下载链接，以空行分隔不同路径"
+            type="textarea"
+            :autosize="{ minRows: 4, maxRows: 16 }"
+          />
         </template>
         <template #footer>
           <el-button @click="resetNewDownload">取消</el-button>
@@ -32,7 +38,7 @@
               <div class="mb-4">
                 <span class="mr-4">{{ download.name }}</span>
                 <!-- TODO: implement cancel feature -->
-                <!-- <el-button @click="cancel(download)">取消</el-button> -->
+                <el-button @click="cancel(download)">取消</el-button>
               </div>
               <template v-for="file in download.files">
                 <div>
@@ -70,7 +76,7 @@ import { send, store } from '@koishijs/client'
 import { reactive, ref } from 'vue'
 
 import type { ElDialog } from 'element-plus'
-import type { } from '..'
+import type {} from '..'
 
 const keyword = ref('')
 
@@ -94,7 +100,6 @@ function createDownload() {
 
 type Download = typeof store.fonts.downloads[0]
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function cancel(download: Download) {
   send('fonts/cancel', download.name)
 }
