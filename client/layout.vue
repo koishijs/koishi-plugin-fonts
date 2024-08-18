@@ -100,8 +100,8 @@ function createDownload() {
 
 type Download = typeof store.fonts.downloads[0]
 
-function cancel(download: Download) {
-  send('fonts/cancel', download.name)
+async function cancel(download: Download) {
+  send('fonts/cancel', download.name, [])
 }
 </script>
 

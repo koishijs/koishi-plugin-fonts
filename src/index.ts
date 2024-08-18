@@ -1,8 +1,8 @@
 import { createHash } from 'crypto'
-import { createWriteStream } from 'fs'
+import { createWriteStream, rmSync } from 'fs'
 import { mkdir, rename } from 'fs/promises'
 import { resolve } from 'path'
-import { Readable } from 'stream'
+import { Readable, Transform } from 'stream'
 import { ReadableStream } from 'stream/web'
 
 import { DataService } from '@koishijs/console'
@@ -29,7 +29,7 @@ declare module '@koishijs/console' {
   interface Events {
     'fonts/register'(name: string, paths: string[]): void
     'fonts/download'(name: string, url: string[]): void
-    'fonts/cancel'(name: string): boolean
+    'fonts/cancel'(name: string, url: string[]): void
   }
 }
 
@@ -60,7 +60,7 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
     ctx.console.addListener('fonts/download', async (name, urls) => {
       const handle = {
         name,
-        files: urls.map((url) => ({ url, contentLength: 0, downloaded: 0 })),
+        files: urls.map((url) => ({ url, contentLength: 0, downloaded: 0, cancel: false, cancelled: false })),
       }
       this.downloads[name] = handle
       this.fonts.download(name, urls, handle)
@@ -69,13 +69,45 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
         await this.refresh(true)
         if (handle.files.every((file) => file.contentLength > 0 && file.downloaded === file.contentLength)) {
           clearInterval(timer)
-          delete this.downloads[name]
+          setTimeout(async () => {
+            delete this.downloads[name]
+            await this.refresh(true)
+          }, 2000)
         }
-      }, 100)
+      }, 1000)
+      Object.defineProperty(this.downloads[name], 'timer', { value: timer })
     })
-    ctx.console.addListener('fonts/cancel', (name) => {
-      ctx.logger.info('cancel', name)
-      return true
+    ctx.console.addListener('fonts/cancel', async (name, urls) => {
+      ctx.logger.info('request cancel', name)
+      this.downloads[name].files.forEach((file) => {
+        if (urls.includes(file.url) || !urls.length) {
+          file.cancel = true
+        }
+      })
+      let count = 0
+      const timer = setInterval(async () => {
+        if (
+          this.downloads[name].files
+            .filter((file) => urls.includes(file.url) || !urls.length)
+            .every((file) => file.cancelled)
+        ) {
+          ctx.logger.info('cancel success', name)
+          clearInterval(timer)
+          if (!urls.length) {
+            clearInterval(this.downloads[name]['timer'])
+            delete this.downloads[name]
+          }
+          else {
+            this.downloads[name].files = this.downloads[name].files
+              .filter((file) => !urls.includes(file.url))
+          }
+          await this.refresh(true)
+        }
+        else if (count > 5) {
+          clearInterval(timer)
+        }
+        count++
+      }, 1000)
     })
   }
 
@@ -94,6 +126,8 @@ namespace FontsProvider {
       url: string
       contentLength: number
       downloaded: number
+      cancel: boolean
+      cancelled: boolean
     }[]
   }
 
@@ -139,7 +173,21 @@ class Fonts extends Service {
   }
 
   async download(name: string, urls: string[], handle: FontsProvider.Download) {
-    return await Promise.all(urls.map((url, index) => this.downloadOne(name, url, handle.files[index])))
+    const paths = await Promise.all(urls.map((url, index) => this.downloadOne(name, url, handle.files[index]))).catch((err) => { this.ctx.logger.error(err) })
+    /*
+     * const size = handle.files.reduce((sum, file) => sum + file.contentLength, 0)
+     * const time = new Date()
+     */
+    this.ctx.logger.info(paths)
+    // const row = await this.ctx.model.get('fonts', { name })
+    /*
+     * if (row.length) {
+     *   await this.ctx.model.set('fonts', { name }, { paths: [...row[0].paths, ...paths], size: row[0].size + size, updatedTime: time })
+     * }
+     * else {
+     *   await this.ctx.model.create('fonts', { name, paths, size, createdTime: time, updatedTime: time })
+     * }
+     */
   }
 
   /**
@@ -154,8 +202,10 @@ class Fonts extends Service {
    */
   async downloadOne(name: string, url: string, handle: FontsProvider.Download['files'][number]) {
     this.ctx.logger.info('download', name, url)
-    const { data, headers } = await this.ctx.http<ReadableStream>(url, { responseType: 'stream' })
-    const hash = createHash('sha256').setEncoding('hex')
+    const controller = new AbortController()
+    const { signal } = controller
+    const { data, headers } = await this.ctx.http<ReadableStream>(url, { responseType: 'stream', signal })
+    const hash = createHash('sha256', { emitClose: false }).setEncoding('hex')
     const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
     const output = createWriteStream(tempFilePath)
 
@@ -172,6 +222,7 @@ class Fonts extends Service {
     }
 
     /*
+     * TODO: handle zip 7z rar...
      * in case the filename didn't contains the extension,
      * resolve file type from header.
      */
@@ -201,23 +252,161 @@ class Fonts extends Service {
         }
       }
     }
-
+    // TODO: remove temp codes after testing
+    let throttle = null
     const readable = Readable.fromWeb(data)
-    readable.pipe(hash)
-    readable.pipe(output)
+    if (process.env.NODE_ENV === 'development') {
+      throttle = new Throttle(1)
+      readable.pipe(throttle).pipe(hash)
+      readable.pipe(throttle).pipe(output)
+    } else {
+      readable.pipe(hash)
+      readable.pipe(output)
+    }
 
-    await new Promise<string>((_resolve, reject) => {
-      readable.on('error', reject)
-      readable.on('data', (chunk) => {
+    return await new Promise<string>((_resolve, reject) => {
+      const cleanup = () => {
+        if (process.env.NODE_ENV === 'development') {
+          throttle.unpipe(output)
+          throttle.unpipe(hash)
+          readable.unpipe(throttle)
+        } else {
+          readable.unpipe(output)
+          readable.unpipe(hash)
+        }
+        if (process.env.NODE_ENV === 'development') {
+          this.ctx.logger.info('clean pipe')
+        }
+        output.removeAllListeners()
+        hash.removeAllListeners()
+        if (process.env.NODE_ENV === 'development') {
+          throttle.removeAllListeners()
+        }
+        readable.removeAllListeners()
+        if (process.env.NODE_ENV === 'development') {
+          this.ctx.logger.info('clean listeners')
+          this.ctx.logger.info('clean stream start')
+        }
+
+        if (!output.destroyed) {
+          // still emit data event after destroy and clear buffer
+          output.end(() => {
+            if (process.env.NODE_ENV === 'development') {
+              this.ctx.logger.info('clean output buffer')
+            }
+            output.destroy()
+            if (process.env.NODE_ENV === 'development') {
+              this.ctx.logger.info('clean output')
+            }
+            rmSync(tempFilePath)
+            if (process.env.NODE_ENV === 'development') {
+              this.ctx.logger.info('rm file', tempFilePath)
+            }
+          })
+        }
+        if (!hash.destroyed) {
+          hash.end(() => {
+            if (process.env.NODE_ENV === 'development') {
+              this.ctx.logger.info('clean hash buffer')
+            }
+            hash.destroy()
+            if (process.env.NODE_ENV === 'development') {
+              this.ctx.logger.info('clean hash')
+            }
+          })
+        }
+        if (process.env.NODE_ENV === 'development') {
+          if (!throttle.destroyed) {
+            while (throttle.read() !== null) {
+              this.ctx.logger.info('clear throttle buffer')
+            }
+            throttle.destroy()
+            this.ctx.logger.info('clean throttle')
+          }
+        }
+        if (!readable.destroyed) {
+          while (readable.read() !== null) {
+            if (process.env.NODE_ENV === 'development') {
+              this.ctx.logger.info('clear readable buffer')
+            }
+          }
+          readable.destroy()
+          if (process.env.NODE_ENV === 'development') {
+            this.ctx.logger.info('clean readable')
+          }
+        }
+
+        controller.abort()
+        if (process.env.NODE_ENV === 'development') {
+          this.ctx.logger.info('abort controller')
+        }
+
+        handle.cancelled = true
+        _resolve('')
+      }
+      readable.on('error', async (err) => {
+        cleanup()
+        _resolve('')
+      })
+      readable.pipe(throttle).on('data', async (chunk) => {
+        if (handle.cancel) {
+          cleanup()
+        }
+        if (process.env.NODE_ENV === 'development') {
+          this.ctx.logger.info('downloading', name, handle.downloaded, chunk.length)
+        }
         // update progress
         handle.downloaded += chunk.length
       })
+      if (process.env.NODE_ENV === 'development') {
+        readable.on('end', () => {
+          this.ctx.logger.info('download finish', name)
+        })
+      }
       hash.on('finish', async () => {
+        if (handle.cancel) {
+          if (process.env.NODE_ENV === 'development') {
+            this.ctx.logger.info('go into finish cancel')
+          }
+          cleanup()
+        }
         const sha256 = hash.read() as string
-        await rename(tempFilePath, resolve(this.root, name + `.${sha256}`))
-        _resolve(sha256)
+        const path = resolve(this.root, name + `.${sha256}`)
+        this.ctx.logger.info('download finish', name, path)
+        await rename(tempFilePath, path)
+        _resolve(path)
       })
     })
+  }
+}
+
+class Throttle extends Transform {
+  private rate: number
+  private chunkSize: number
+  private lastTime: number
+
+  constructor(rate: number) {
+    super({ emitClose: false })
+    this.rate = rate // bytes per second
+    this.chunkSize = rate / 10 // bytes per 100ms
+    this.lastTime = Date.now()
+  }
+
+  _transform(chunk, encoding, callback) {
+    const now = Date.now()
+    const elapsed = now - this.lastTime
+
+    if (elapsed < 1000) {
+      setTimeout(() => {
+        this.push(chunk)
+        callback()
+      }, 1000 - elapsed)
+    }
+    else {
+      this.push(chunk)
+      this.lastTime = now
+      callback()
+    }
   }
 }
 
