@@ -2,7 +2,7 @@ import { createHash } from 'crypto'
 import { createWriteStream, rmSync } from 'fs'
 import { mkdir, rename } from 'fs/promises'
 import { resolve } from 'path'
-import { Readable, Transform } from 'stream'
+import { Readable } from 'stream'
 import { ReadableStream } from 'stream/web'
 
 import { DataService } from '@koishijs/console'
@@ -51,9 +51,9 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
       process.env.KOISHI_BASE
         ? [process.env.KOISHI_BASE + '/dist/index.js', process.env.KOISHI_BASE + '/dist/style.css']
         : {
-          dev: resolve(__dirname, '../client/index.ts'),
-          prod: resolve(__dirname, '../dist'),
-        },
+            dev: resolve(__dirname, '../client/index.ts'),
+            prod: resolve(__dirname, '../dist'),
+          },
     )
 
     ctx.console.addListener('fonts/register', this.fonts.register)
@@ -173,21 +173,29 @@ class Fonts extends Service {
   }
 
   async download(name: string, urls: string[], handle: FontsProvider.Download) {
-    const paths = await Promise.all(urls.map((url, index) => this.downloadOne(name, url, handle.files[index]))).catch((err) => { this.ctx.logger.error(err) })
-    /*
-     * const size = handle.files.reduce((sum, file) => sum + file.contentLength, 0)
-     * const time = new Date()
-     */
+    const paths = await Promise.all(urls.map((url, index) => this.downloadOne(name, url, handle.files[index])))
+    const size = handle.files.reduce((sum, file) => sum + file.contentLength, 0)
+    const time = new Date()
     this.ctx.logger.info(paths)
-    // const row = await this.ctx.model.get('fonts', { name })
-    /*
-     * if (row.length) {
-     *   await this.ctx.model.set('fonts', { name }, { paths: [...row[0].paths, ...paths], size: row[0].size + size, updatedTime: time })
-     * }
-     * else {
-     *   await this.ctx.model.create('fonts', { name, paths, size, createdTime: time, updatedTime: time })
-     * }
-     */
+    const row = await this.ctx.model.get('fonts', { name })
+
+    const fontPaths = paths.filter((path) => path.trim().length > 0)
+    if (fontPaths.length === 0) return
+
+    if (row.length) {
+      await this.ctx.model.set(
+        'fonts',
+        { name },
+        {
+          paths: [...row[0].paths, ...paths],
+          size: row[0].size + size,
+          updatedTime: time,
+        },
+      )
+    }
+    else {
+      await this.ctx.model.create('fonts', { name, paths, size, createdTime: time, updatedTime: time })
+    }
   }
 
   /**
@@ -252,161 +260,66 @@ class Fonts extends Service {
         }
       }
     }
-    // TODO: remove temp codes after testing
-    let throttle = null
+
     const readable = Readable.fromWeb(data)
-    if (process.env.NODE_ENV === 'development') {
-      throttle = new Throttle(1)
-      readable.pipe(throttle).pipe(hash)
-      readable.pipe(throttle).pipe(output)
-    } else {
-      readable.pipe(hash)
-      readable.pipe(output)
-    }
+    readable.pipe(hash)
+    readable.pipe(output)
 
     return await new Promise<string>((_resolve, reject) => {
       const cleanup = () => {
-        if (process.env.NODE_ENV === 'development') {
-          throttle.unpipe(output)
-          throttle.unpipe(hash)
-          readable.unpipe(throttle)
-        } else {
-          readable.unpipe(output)
-          readable.unpipe(hash)
-        }
-        if (process.env.NODE_ENV === 'development') {
-          this.ctx.logger.info('clean pipe')
-        }
+        readable.unpipe(output)
+        readable.unpipe(hash)
+
         output.removeAllListeners()
         hash.removeAllListeners()
-        if (process.env.NODE_ENV === 'development') {
-          throttle.removeAllListeners()
-        }
         readable.removeAllListeners()
-        if (process.env.NODE_ENV === 'development') {
-          this.ctx.logger.info('clean listeners')
-          this.ctx.logger.info('clean stream start')
-        }
 
         if (!output.destroyed) {
           // still emit data event after destroy and clear buffer
           output.end(() => {
-            if (process.env.NODE_ENV === 'development') {
-              this.ctx.logger.info('clean output buffer')
-            }
             output.destroy()
-            if (process.env.NODE_ENV === 'development') {
-              this.ctx.logger.info('clean output')
-            }
             rmSync(tempFilePath)
-            if (process.env.NODE_ENV === 'development') {
-              this.ctx.logger.info('rm file', tempFilePath)
-            }
           })
         }
         if (!hash.destroyed) {
           hash.end(() => {
-            if (process.env.NODE_ENV === 'development') {
-              this.ctx.logger.info('clean hash buffer')
-            }
             hash.destroy()
-            if (process.env.NODE_ENV === 'development') {
-              this.ctx.logger.info('clean hash')
-            }
           })
-        }
-        if (process.env.NODE_ENV === 'development') {
-          if (!throttle.destroyed) {
-            while (throttle.read() !== null) {
-              this.ctx.logger.info('clear throttle buffer')
-            }
-            throttle.destroy()
-            this.ctx.logger.info('clean throttle')
-          }
         }
         if (!readable.destroyed) {
           while (readable.read() !== null) {
-            if (process.env.NODE_ENV === 'development') {
-              this.ctx.logger.info('clear readable buffer')
-            }
+            continue
           }
           readable.destroy()
-          if (process.env.NODE_ENV === 'development') {
-            this.ctx.logger.info('clean readable')
-          }
         }
 
         controller.abort()
-        if (process.env.NODE_ENV === 'development') {
-          this.ctx.logger.info('abort controller')
-        }
-
         handle.cancelled = true
         _resolve('')
       }
+
       readable.on('error', async (err) => {
         cleanup()
-        _resolve('')
       })
-      readable.pipe(throttle).on('data', async (chunk) => {
+
+      readable.on('data', async (chunk) => {
         if (handle.cancel) {
           cleanup()
         }
-        if (process.env.NODE_ENV === 'development') {
-          this.ctx.logger.info('downloading', name, handle.downloaded, chunk.length)
-        }
-        // update progress
         handle.downloaded += chunk.length
       })
-      if (process.env.NODE_ENV === 'development') {
-        readable.on('end', () => {
-          this.ctx.logger.info('download finish', name)
-        })
-      }
+
       hash.on('finish', async () => {
         if (handle.cancel) {
-          if (process.env.NODE_ENV === 'development') {
-            this.ctx.logger.info('go into finish cancel')
-          }
           cleanup()
         }
         const sha256 = hash.read() as string
         const path = resolve(this.root, name + `.${sha256}`)
-        this.ctx.logger.info('download finish', name, path)
         await rename(tempFilePath, path)
+        this.ctx.logger.info('download finish', name, path)
         _resolve(path)
       })
     })
-  }
-}
-
-class Throttle extends Transform {
-  private rate: number
-  private chunkSize: number
-  private lastTime: number
-
-  constructor(rate: number) {
-    super({ emitClose: false })
-    this.rate = rate // bytes per second
-    this.chunkSize = rate / 10 // bytes per 100ms
-    this.lastTime = Date.now()
-  }
-
-  _transform(chunk, encoding, callback) {
-    const now = Date.now()
-    const elapsed = now - this.lastTime
-
-    if (elapsed < 1000) {
-      setTimeout(() => {
-        this.push(chunk)
-        callback()
-      }, 1000 - elapsed)
-    }
-    else {
-      this.push(chunk)
-      this.lastTime = now
-      callback()
-    }
   }
 }
 

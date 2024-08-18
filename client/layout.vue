@@ -13,13 +13,8 @@
         <template #title>新建下载</template>
         <template #default>
           <el-input class="my-2" v-model="newDownload.name" placeholder="输入字体名称" />
-          <el-input
-            class="my-2"
-            v-model="newDownload.urls"
-            placeholder="输入下载链接，以空行分隔不同路径"
-            type="textarea"
-            :autosize="{ minRows: 4, maxRows: 16 }"
-          />
+          <el-input class="my-2" v-model="newDownload.urls" placeholder="输入下载链接，以空行分隔不同路径" type="textarea"
+            :autosize="{ minRows: 4, maxRows: 16 }" />
         </template>
         <template #footer>
           <el-button @click="resetNewDownload">取消</el-button>
@@ -38,13 +33,12 @@
               <div class="mb-4">
                 <span class="mr-4">{{ download.name }}</span>
                 <!-- TODO: implement cancel feature -->
-                <el-button @click="cancel(download)">取消</el-button>
+                <el-button :disabled="disable(download)" :plain="disable(download)"
+                  @click="cancel(download)">取消</el-button>
               </div>
               <template v-for="file in download.files">
                 <div>
-                  <el-progress
-                    :percentage="file.contentLength ? (file.downloaded / file.contentLength) * 100 : 0"
-                  />
+                  <el-progress :percentage="file.contentLength ? (file.downloaded / file.contentLength) * 100 : 0" />
                 </div>
               </template>
             </template>
@@ -99,6 +93,9 @@ function createDownload() {
 }
 
 type Download = typeof store.fonts.downloads[0]
+
+const disable = (download: Download) =>
+  download.files.some(file => file.contentLength > 0 && file.downloaded === file.contentLength)
 
 async function cancel(download: Download) {
   send('fonts/cancel', download.name, [])
