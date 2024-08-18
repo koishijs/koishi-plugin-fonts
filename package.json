@@ -44,6 +44,9 @@
       "zh": "适用于 Koishi 的字体管理器"
     },
     "services": {
+      "required": [
+        "database"
+      ],
       "optional": [
         "console"
       ]

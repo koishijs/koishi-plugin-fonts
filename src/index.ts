@@ -15,7 +15,7 @@ declare module 'koishi' {
   }
 
   interface Tables {
-    fonts: Font[]
+    fonts: Font
   }
 }
 
@@ -110,6 +110,18 @@ class Fonts extends Service {
 
   constructor(ctx: Context, public config: Fonts.Config) {
     super(ctx, 'fonts', true)
+    ctx.model.extend(
+      'fonts',
+      {
+        name: { type: 'string', length: 50, nullable: false },
+        paths: { type: 'list', nullable: false },
+        size: { type: 'unsigned', nullable: false },
+        createdTime: { type: 'timestamp', nullable: false },
+        updatedTime: { type: 'timestamp', nullable: false },
+      },
+      {
+        primary: 'name',
+      })
     ctx.plugin(FontsProvider, this)
   }
 
@@ -119,7 +131,7 @@ class Fonts extends Service {
   }
 
   async list(): Promise<Font[]> {
-    return []
+    return await this.ctx.model.get('fonts', {})
   }
 
   register(name: string, paths: string[]) {
