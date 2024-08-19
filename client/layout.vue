@@ -32,7 +32,7 @@
             <template v-for="download in store.fonts.downloads">
               <div class="mb-4">
                 <span class="mr-4">{{ download.name }}</span>
-                <!-- TODO: implement cancel feature -->
+                <!-- TODO: implement a fine-grained cancel feature -->
                 <el-button :disabled="disable(download)" :plain="disable(download)"
                   @click="cancel(download)">取消</el-button>
               </div>

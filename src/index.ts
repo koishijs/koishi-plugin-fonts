@@ -60,14 +60,32 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
     ctx.console.addListener('fonts/download', async (name, urls) => {
       const handle = {
         name,
-        files: urls.map((url) => ({ url, contentLength: 0, downloaded: 0, cancel: false, cancelled: false })),
+        files: urls.map((url) => ({
+          url,
+          contentLength: 0,
+          downloaded: 0,
+          cancel: false,
+          cancelled: false,
+          failure: false,
+        })),
       }
       this.downloads[name] = handle
       this.fonts.download(name, urls, handle)
       await this.refresh(true)
       const timer = setInterval(async () => {
         await this.refresh(true)
-        if (handle.files.every((file) => file.contentLength > 0 && file.downloaded === file.contentLength)) {
+
+        // TODO: need a bettle handle when some are failure, some are finished
+        if (handle.files.every((file) => file.failure)) {
+          clearInterval(timer)
+          delete this.downloads[name]
+          await this.refresh(true)
+        }
+        if (
+          handle.files
+            .filter((file) => !file.failure)
+            .every((file) => file.contentLength > 0 && file.downloaded === file.contentLength)
+        ) {
           clearInterval(timer)
           setTimeout(async () => {
             delete this.downloads[name]
@@ -128,6 +146,7 @@ namespace FontsProvider {
       downloaded: number
       cancel: boolean
       cancelled: boolean
+      failure: boolean
     }[]
   }
 
@@ -299,6 +318,7 @@ class Fonts extends Service {
       }
 
       readable.on('error', async (err) => {
+        handle.failure = true
         cleanup()
       })
 
