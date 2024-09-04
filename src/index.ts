@@ -2,7 +2,7 @@ import { createHash } from 'crypto'
 import { createWriteStream, existsSync, rmSync } from 'fs'
 import { mkdir, rename } from 'fs/promises'
 import { resolve } from 'path'
-import { Readable } from 'stream'
+import { Readable, Transform } from 'stream'
 import { ReadableStream } from 'stream/web'
 
 import { DataService } from '@koishijs/console'
@@ -305,17 +305,26 @@ class Fonts extends Service {
     }
 
     const readable = Readable.fromWeb(data)
-    readable.pipe(hash)
-    readable.pipe(output)
+    // readable.pipe(hash)
+    // readable.pipe(output)
+    // TODO: remove speed limit after develop
+    const throttle = new Throttle(1)
+    readable.pipe(throttle)
+    throttle.pipe(hash)
+    throttle.pipe(output)
 
     return await new Promise<string>((_resolve, reject) => {
       const cleanup = () => {
         readable.unpipe(output)
         readable.unpipe(hash)
+        // TODO: remove speed limit after develop
+        readable.unpipe(throttle)
 
         output.removeAllListeners()
         hash.removeAllListeners()
         readable.removeAllListeners()
+        // TODO: remove speed limit after develop
+        throttle.removeAllListeners()
 
         if (!output.destroyed) {
           // still emit data event after destroy and clear buffer
@@ -329,6 +338,15 @@ class Fonts extends Service {
             hash.destroy()
           })
         }
+
+        // TODO: remove speed limit after develop
+        if (!throttle.destroyed) {
+          while (throttle.read() !== null) {
+            continue
+          }
+          throttle.destroy()
+        }
+
         if (!readable.destroyed) {
           while (readable.read() !== null) {
             continue
@@ -346,7 +364,9 @@ class Fonts extends Service {
         cleanup()
       })
 
-      readable.on('data', async (chunk) => {
+      // readable.on('data', async (chunk) => {
+      // TODO: remove speed limit after develop
+      throttle.on('data', async (chunk) => {
         if (handle.cancel) {
           cleanup()
         }
@@ -364,6 +384,36 @@ class Fonts extends Service {
         _resolve(path)
       })
     })
+  }
+}
+
+class Throttle extends Transform {
+  private rate: number
+  private chunkSize: number
+  private lastTime: number
+
+  constructor(rate: number) {
+    super({ emitClose: false })
+    this.rate = rate // bytes per second
+    this.chunkSize = rate / 10 // bytes per 100ms
+    this.lastTime = Date.now()
+  }
+
+  _transform(chunk, encoding, callback) {
+    const now = Date.now()
+    const elapsed = now - this.lastTime
+
+    if (elapsed < 1000) {
+      setTimeout(() => {
+        this.push(chunk)
+        callback()
+      }, 1000 - elapsed)
+    }
+    else {
+      this.push(chunk)
+      this.lastTime = now
+      callback()
+    }
   }
 }
 
