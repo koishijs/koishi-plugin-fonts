@@ -38,7 +38,7 @@
               </div>
               <template v-for="file in download.files">
                 <div>
-                  <el-progress :percentage="file.contentLength ? (file.downloaded / file.contentLength) * 100 : 0" />
+                  <el-progress :percentage="file.contentLength ? Math.floor((file.downloaded / file.contentLength) * 100) : 0" />
                 </div>
               </template>
             </template>
@@ -69,7 +69,7 @@
 import { send, store } from '@koishijs/client'
 import { reactive, ref } from 'vue'
 
-import type { ElDialog } from 'element-plus'
+import type {} from 'element-plus'
 import type {} from '..'
 
 const keyword = ref('')
