@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { createWriteStream, rmSync } from 'fs'
+import { createWriteStream, existsSync, rmSync } from 'fs'
 import { mkdir, rename } from 'fs/promises'
 import { resolve } from 'path'
 import { Readable } from 'stream'
@@ -28,6 +28,7 @@ declare module '@koishijs/console' {
 
   interface Events {
     'fonts/register'(name: string, paths: string[]): void
+    'fonts/delete'(name: string, paths: string[]): void
     'fonts/download'(name: string, url: string[]): void
     'fonts/cancel'(name: string, url: string[]): void
   }
@@ -51,12 +52,16 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
       process.env.KOISHI_BASE
         ? [process.env.KOISHI_BASE + '/dist/index.js', process.env.KOISHI_BASE + '/dist/style.css']
         : {
-            dev: resolve(__dirname, '../client/index.ts'),
-            prod: resolve(__dirname, '../dist'),
-          },
+          dev: resolve(__dirname, '../client/index.ts'),
+          prod: resolve(__dirname, '../dist'),
+        },
     )
 
     ctx.console.addListener('fonts/register', this.fonts.register)
+    ctx.console.addListener('fonts/delete', async (name, paths) => {
+      await this.fonts.delete(name, paths)
+      await this.refresh(true)
+    })
     ctx.console.addListener('fonts/download', async (name, urls) => {
       const handle = {
         name,
@@ -189,6 +194,25 @@ class Fonts extends Service {
 
   register(name: string, paths: string[]) {
     this.ctx.logger.info('register', name, paths)
+  }
+
+  async delete(name: string, paths: string[]) {
+    const row = await this.ctx.model.get('fonts', { name })
+    if (!row.length) return
+
+    paths.forEach(path => {
+      if (existsSync(path)) {
+        rmSync(path)
+      }
+    })
+
+    if (paths.length) {
+      const fontPaths = row[0].paths.filter((path) => !paths.includes(path) || !paths.length)
+      await this.ctx.model.set('fonts', { name }, { paths: fontPaths, updatedTime: new Date() })
+    }
+    else {
+      await this.ctx.model.remove('fonts', { name })
+    }
   }
 
   async download(name: string, urls: string[], handle: FontsProvider.Download) {
