@@ -52,9 +52,9 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
       process.env.KOISHI_BASE
         ? [process.env.KOISHI_BASE + '/dist/index.js', process.env.KOISHI_BASE + '/dist/style.css']
         : {
-          dev: resolve(__dirname, '../client/index.ts'),
-          prod: resolve(__dirname, '../dist'),
-        },
+            dev: resolve(__dirname, '../client/index.ts'),
+            prod: resolve(__dirname, '../dist'),
+          },
     )
 
     ctx.console.addListener('fonts/register', this.fonts.register)
@@ -200,7 +200,7 @@ class Fonts extends Service {
     const row = await this.ctx.model.get('fonts', { name })
     if (!row.length) return
 
-    paths.forEach(path => {
+    paths.forEach((path) => {
       if (existsSync(path)) {
         rmSync(path)
       }
@@ -305,9 +305,11 @@ class Fonts extends Service {
     }
 
     const readable = Readable.fromWeb(data)
-    // readable.pipe(hash)
-    // readable.pipe(output)
-    // TODO: remove speed limit after develop
+    /*
+     * readable.pipe(hash)
+     * readable.pipe(output)
+     * TODO: remove speed limit after develop
+     */
     const throttle = new Throttle(1)
     readable.pipe(throttle)
     throttle.pipe(hash)
@@ -364,8 +366,10 @@ class Fonts extends Service {
         cleanup()
       })
 
-      // readable.on('data', async (chunk) => {
-      // TODO: remove speed limit after develop
+      /*
+       * readable.on('data', async (chunk) => {
+       * TODO: remove speed limit after develop
+       */
       throttle.on('data', async (chunk) => {
         if (handle.cancel) {
           cleanup()
