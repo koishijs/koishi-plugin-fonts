@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "tsc -b && koishi-console build",
-    "lint": "eslint ."
+    "lint": "eslint . --quiet"
   },
   "license": "MIT",
   "repository": {

@@ -22,13 +22,15 @@ export default [
             c => c.includes('unocss')
               || c.includes('vue/valid-v-for')
               || c.includes('vue/require-v-for-key')
-              || c.includes('vue/multi-word-component-names')
           )
       })
+      .map((config) => ({
+        ...config,
+        files: [...(config.files || []), "client/*.vue"],
+      }))
   ]
     .map((config) => ({
       ...config,
-      files: [...(config.files || []), "client/*.vue"],
       ignores: [...(config.ignores || []), "external/**", "temp/**", "dist/**", "lib/**", "**/*.mjs"],
     })),
 ]
