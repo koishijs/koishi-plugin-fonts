@@ -206,8 +206,8 @@ class Fonts extends Service {
       }
     })
 
-    if (paths.length) {
-      const fontPaths = row[0].paths.filter((path) => !paths.includes(path) || !paths.length)
+    const fontPaths = row[0].paths.filter((path) => !paths.includes(path) || !paths.length)
+    if (fontPaths.length) {
       await this.ctx.model.set('fonts', { name }, { paths: fontPaths, updatedTime: new Date() })
     }
     else {
@@ -377,6 +377,9 @@ class Fonts extends Service {
         handle.downloaded += chunk.length
       })
 
+      /**
+       * TODO: handle same file
+      */
       hash.on('finish', async () => {
         if (handle.cancel) {
           cleanup()

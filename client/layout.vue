@@ -33,6 +33,10 @@ const disable = (download: Download) =>
 async function cancel(download: Download) {
   send('fonts/cancel', download.name, [])
 }
+
+async function deleteFonts(name, paths) {
+  send('fonts/delete', name, paths)
+}
 </script>
 
 <template>
@@ -50,13 +54,11 @@ async function cancel(download: Download) {
         <template #title>新建下载</template>
         <template #default>
           <el-input class="my-2" v-model="newDownload.name" placeholder="输入字体名称" />
-          <el-input
-            class="my-2"
-            v-model="newDownload.urls"
-            placeholder="输入下载链接，以空行分隔不同路径"
-            type="textarea"
-            :autosize="{ minRows: 4, maxRows: 16 }"
-          />
+          <el-input class="my-2"
+                    v-model="newDownload.urls"
+                    placeholder="输入下载链接，以空行分隔不同路径"
+                    type="textarea"
+                    :autosize="{ minRows: 4, maxRows: 16 }" />
         </template>
         <template #footer>
           <el-button @click="resetNewDownload">取消</el-button>
@@ -82,8 +84,7 @@ async function cancel(download: Download) {
               <template v-for="file in download.files">
                 <div>
                   <el-progress
-                    :percentage="file.contentLength ? Math.floor((file.downloaded / file.contentLength) * 100) : 0"
-                  />
+                    :percentage="file.contentLength ? Math.floor((file.downloaded / file.contentLength) * 100) : 0" />
                 </div>
               </template>
             </template>
@@ -91,6 +92,7 @@ async function cancel(download: Download) {
         </el-card>
       </template>
 
+      <!-- TODO: use a better table -->
       <el-scrollbar class="fonts-list" ref="rootRef">
         <template v-if="store.fonts.fonts.length === 0">
           <el-empty description="暂无字体" />
@@ -98,10 +100,14 @@ async function cancel(download: Download) {
         <el-collapse>
           <template v-for="font in store.fonts.fonts">
             <el-collapse-item v-show="font.name.includes(keyword)">
-              <template #title> {{ font.name }} / {{ font.size }} </template>
-
-              <!-- TODO: add more operations -->
-              <div>{{ font.paths }}</div>
+              <template #title>
+                {{ font.name }} / {{ font.size }}
+                <el-button @click="deleteFonts(font.name, [])" plain>删除</el-button>
+              </template>
+              <div v-for="path in font.paths">
+                {{ path }}
+                <el-button @click="deleteFonts(font.name, [path])" plain>删除</el-button>
+              </div>
             </el-collapse-item>
           </template>
         </el-collapse>
