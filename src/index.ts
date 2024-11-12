@@ -135,8 +135,74 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
   }
 
   async get(): Promise<FontsProvider.Payload> {
+    const download: Record<string, FontsProvider.Download> = {
+      1111: {
+        name: '1111',
+        files: [
+          {
+            url: '',
+            contentLength: 100,
+            downloaded: 25,
+            cancel: false,
+            cancelled: false,
+            failure: false,
+          },
+          {
+            url: '',
+            contentLength: 100,
+            downloaded: 50,
+            cancel: false,
+            cancelled: false,
+            failure: false,
+          },
+        ],
+      },
+      2222: {
+        name: '2222',
+        files: [
+          {
+            url: '',
+            contentLength: 100,
+            downloaded: 75,
+            cancel: false,
+            cancelled: false,
+            failure: false,
+          },
+          {
+            url: '',
+            contentLength: 100,
+            downloaded: 100,
+            cancel: false,
+            cancelled: false,
+            failure: false,
+          },
+        ],
+      },
+      3333: {
+        name: '3333',
+        files: [
+          {
+            url: '',
+            contentLength: 100,
+            downloaded: 75,
+            cancel: false,
+            cancelled: false,
+            failure: true,
+          },
+          {
+            url: '',
+            contentLength: 100,
+            downloaded: 25,
+            cancel: true,
+            cancelled: false,
+            failure: false,
+          },
+        ],
+      },
+    }
     return {
-      downloads: this.downloads,
+      // downloads: this.downloads,
+      downloads: download,
       fonts: await this.fonts.list(),
     }
   }

@@ -1,7 +1,6 @@
 <script lang="ts" setup>
 import { send, store } from '@koishijs/client'
 import { reactive, ref } from 'vue'
-
 import type {} from 'element-plus'
 import type {} from '../lib'
 
@@ -30,12 +29,32 @@ type Download = typeof store.fonts.downloads[0]
 const disable = (download: Download) =>
   download.files.some((file) => file.contentLength > 0 && file.downloaded === file.contentLength)
 
-async function cancel(download: Download) {
-  send('fonts/cancel', download.name, [])
+const disableOne = (file) =>
+  file.contentLength > 0 && file.downloaded === file.contentLength ||
+  file.cancel
+
+const indeterminate = (file) => file.failure || file.cancel
+
+const status = (file): 'success' | 'warning' | 'exception' => {
+  if (file.failure) return 'exception'
+  if (file.cancel) return 'warning'
+  if (file.downloaded === file.contentLength) return 'success'
+}
+
+async function cancel(name, paths) {
+  send('fonts/cancel', name, paths)
 }
 
 async function deleteFonts(name, paths) {
   send('fonts/delete', name, paths)
+}
+
+function getFileName(filePath: string): string {
+  const path = filePath.split(/[\\/]/)
+  if (!path[path.length - 1]) {
+    path.pop()
+  }
+  return path[path.length - 1]
 }
 </script>
 
@@ -54,11 +73,8 @@ async function deleteFonts(name, paths) {
         <template #title>新建下载</template>
         <template #default>
           <el-input class="my-2" v-model="newDownload.name" placeholder="输入字体名称" />
-          <el-input class="my-2"
-                    v-model="newDownload.urls"
-                    placeholder="输入下载链接，以空行分隔不同路径"
-                    type="textarea"
-                    :autosize="{ minRows: 4, maxRows: 16 }" />
+          <el-input class="my-2" v-model="newDownload.urls" placeholder="输入下载链接，以空行分隔不同路径" type="textarea"
+            :autosize="{ minRows: 4, maxRows: 16 }" />
         </template>
         <template #footer>
           <el-button @click="resetNewDownload">取消</el-button>
@@ -76,61 +92,64 @@ async function deleteFonts(name, paths) {
             <template v-for="download in store.fonts.downloads">
               <div class="mb-4">
                 <span class="mr-4">{{ download.name }}</span>
-                <!-- TODO: implement a fine-grained cancel feature -->
-                <el-button :disabled="disable(download)" :plain="disable(download)" @click="cancel(download)">
+                <el-button :disabled="disable(download)" :plain="disable(download)" @click="cancel(download.name, [])">
                   取消
                 </el-button>
               </div>
-              <template v-for="file in download.files">
-                <div>
-                  <el-progress
-                    :percentage="file.contentLength ? Math.floor((file.downloaded / file.contentLength) * 100) : 0" />
-                </div>
-              </template>
+              <el-row class="paths" v-for="file in download.files">
+                <el-col :span="2"></el-col>
+                <el-col :span="20">
+                  <el-progress class="file-progress"
+                    :percentage="file.contentLength ? Math.floor((file.downloaded / file.contentLength) * 100) : 0"
+                    :indeterminate="indeterminate(file)" :status="status(file)" />
+                </el-col>
+                <el-col :span="2" class="button-container">
+                  <el-button @click="cancel(download.name, [file.url])" :disabled="disableOne(file)"
+                    :plain="disableOne(file)">
+                    取消
+                  </el-button>
+                </el-col>
+              </el-row>
             </template>
           </el-scrollbar>
         </el-card>
       </template>
 
-      <!-- TODO: use a better table -->
       <el-scrollbar class="fonts-list" ref="rootRef">
         <template v-if="store.fonts.fonts.length === 0">
           <el-empty description="暂无字体" />
         </template>
-        <el-collapse>
-          <template v-for="font in store.fonts.fonts">
-            <el-collapse-item v-show="font.name.includes(keyword)">
-              <template #title>
-                {{ font.name }} / {{ font.size }}
-                <el-button @click="deleteFonts(font.name, [])" plain>删除</el-button>
-              </template>
-              <div v-for="path in font.paths">
-                {{ path }}
-                <el-button @click="deleteFonts(font.name, [path])" plain>删除</el-button>
-              </div>
-            </el-collapse-item>
-          </template>
-        </el-collapse>
 
-        <!-- <el-table :data="store.fonts.fonts" class="fonts-list" ref="rootRef">
+        <el-table :data="store.fonts.fonts" class="fonts-list" ref="rootRef">
           <el-table-column type="expand">
             <template #default="scope">
-              <ul m="4">
-                <li v-for="(path, index) in scope.row.paths" :key="index">
-                  <div>{{ path }}</div>
-                  <el-button @click="" plain>删除</el-button>
-                </li>
-              </ul>
+              <el-row class="paths" v-for="(path, index) in scope.row.paths" :key="index">
+                <el-col :span="2"></el-col>
+                <el-col :span="20">
+                  <el-popover :content="path" width="200" placement="top-start">
+                    <template #reference>
+                      <div class="truncate">{{ getFileName(path) }}</div>
+                    </template>
+                  </el-popover>
+                </el-col>
+                <el-col :span="2" class="button-container">
+                  <el-button @click="deleteFonts(scope.row.name, [path])" plain>
+                    <k-icon name="delete" />
+                  </el-button>
+                </el-col>
+              </el-row>
             </template>
           </el-table-column>
-          <el-table-column label="Name" prop="name" />
-          <el-table-column label="size" prop="size" />
-          <el-table-column label="options">
-            <template #default>
-              <el-button @click="" plain>删除</el-button>
+          <el-table-column label="字体名" prop="name" />
+          <el-table-column label="大小" prop="size" />
+          <el-table-column label="操作">
+            <template #default="scope">
+              <el-button @click="deleteFonts(scope.row.name, [])" plain>
+                <k-icon name="delete" />
+              </el-button>
             </template>
           </el-table-column>
-        </el-table> -->
+        </el-table>
       </el-scrollbar>
     </div>
   </k-layout>
@@ -151,5 +170,17 @@ async function deleteFonts(name, paths) {
   width: 100%;
   height: 100%;
   overflow: auto;
+}
+
+.paths {
+  align-items: center;
+}
+
+.button-container {
+  opacity: 0;
+}
+
+.paths:hover .button-container {
+  opacity: 1;
 }
 </style>
