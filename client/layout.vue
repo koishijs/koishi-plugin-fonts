@@ -30,7 +30,7 @@ const disable = (download: Download) =>
   download.files.some((file) => file.contentLength > 0 && file.downloaded === file.contentLength)
 
 const disableOne = (file) =>
-  file.contentLength > 0 && file.downloaded === file.contentLength ||
+  (file.contentLength > 0 && file.downloaded === file.contentLength) ||
   file.cancel
 
 const indeterminate = (file) => file.failure || file.cancel
@@ -40,6 +40,9 @@ const status = (file): 'success' | 'warning' | 'exception' => {
   if (file.cancel) return 'warning'
   if (file.downloaded === file.contentLength) return 'success'
 }
+
+const percentage = (file) =>
+  file.contentLength ? Math.floor((file.downloaded / file.contentLength) * 100) : 0
 
 async function cancel(name, paths) {
   send('fonts/cancel', name, paths)
@@ -73,8 +76,11 @@ function getFileName(filePath: string): string {
         <template #title>新建下载</template>
         <template #default>
           <el-input class="my-2" v-model="newDownload.name" placeholder="输入字体名称" />
-          <el-input class="my-2" v-model="newDownload.urls" placeholder="输入下载链接，以空行分隔不同路径" type="textarea"
-            :autosize="{ minRows: 4, maxRows: 16 }" />
+          <el-input class="my-2"
+                    v-model="newDownload.urls"
+                    placeholder="输入下载链接，以空行分隔不同路径"
+                    type="textarea"
+                    :autosize="{ minRows: 4, maxRows: 16 }" />
         </template>
         <template #footer>
           <el-button @click="resetNewDownload">取消</el-button>
@@ -100,12 +106,14 @@ function getFileName(filePath: string): string {
                 <el-col :span="2"></el-col>
                 <el-col :span="20">
                   <el-progress class="file-progress"
-                    :percentage="file.contentLength ? Math.floor((file.downloaded / file.contentLength) * 100) : 0"
-                    :indeterminate="indeterminate(file)" :status="status(file)" />
+                               :percentage="percentage(file)"
+                               :indeterminate="indeterminate(file)"
+                               :status="status(file)" />
                 </el-col>
                 <el-col :span="2" class="button-container">
-                  <el-button @click="cancel(download.name, [file.url])" :disabled="disableOne(file)"
-                    :plain="disableOne(file)">
+                  <el-button @click="cancel(download.name, [file.url])"
+                             :disabled="disableOne(file)"
+                             :plain="disableOne(file)">
                     取消
                   </el-button>
                 </el-col>
