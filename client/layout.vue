@@ -128,19 +128,19 @@ function getFileName(filePath: string): string {
           <el-empty description="暂无字体" />
         </template>
 
-        <el-table :data="store.fonts.fonts" class="fonts-list" ref="rootRef">
+        <el-table v-if="store.fonts.fonts.length !== 0" :data="store.fonts.fonts" class="fonts-list" ref="rootRef">
           <el-table-column type="expand">
             <template #default="scope">
               <el-row class="paths" v-for="(path, index) in scope.row.paths" :key="index">
-                <el-col :span="2"></el-col>
-                <el-col :span="20">
+                <el-col :span="3"></el-col>
+                <el-col :span="14">
                   <el-popover :content="path" width="200" placement="top-start">
                     <template #reference>
                       <div class="truncate">{{ getFileName(path) }}</div>
                     </template>
                   </el-popover>
                 </el-col>
-                <el-col :span="2" class="button-container">
+                <el-col :span="1" class="button-container">
                   <el-button @click="deleteFonts(scope.row.name, [path])" plain>
                     <k-icon name="delete" />
                   </el-button>
