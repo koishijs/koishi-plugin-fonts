@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
-import { createWriteStream, existsSync, rmSync } from 'fs'
+import { createWriteStream, existsSync, mkdirSync, rmSync, statSync } from 'fs'
 import { mkdir, rename } from 'fs/promises'
-import { resolve } from 'path'
+import { basename, resolve } from 'path'
 import { Readable } from 'stream'
 import { ReadableStream } from 'stream/web'
 
@@ -257,7 +257,9 @@ class Fonts extends Service {
     const { signal } = controller
     const { data, headers } = await this.ctx.http<ReadableStream>(url, { responseType: 'stream', signal })
     const hash = createHash('sha256', { emitClose: false }).setEncoding('hex')
-    const tempFilePath = resolve(this.root, sanitize(name) + `.${Date.now()}.tmp`)
+    const folderName = sanitize(name)
+    mkdirSync(resolve(this.root, folderName), { recursive: true })
+    const tempFilePath = resolve(this.root, folderName, folderName + `.${Date.now()}.tmp`)
     const output = createWriteStream(tempFilePath)
 
     const length = parseInt(headers.get('content-length'))
@@ -270,6 +272,9 @@ class Fonts extends Service {
     if (contentDisposition) {
       const match = contentDisposition.match(/filename="(.+)"/)
       if (match) name = match[1]
+    }
+    else {
+      name = basename(url)
     }
 
     /*
@@ -362,9 +367,9 @@ class Fonts extends Service {
           cleanup()
         }
         const sha256 = hash.read() as string
-        const path = resolve(this.root, name + `.${sha256}`)
+        const path = resolve(this.root, folderName, name)
         await rename(tempFilePath, path)
-        this.ctx.logger.info('download finish', name, path)
+        this.ctx.logger.info('download finish', name, sha256, path)
         _resolve(path)
       })
     })
