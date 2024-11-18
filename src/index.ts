@@ -200,15 +200,17 @@ class Fonts extends Service {
     const row = await this.ctx.model.get('fonts', { name })
     if (!row.length) return
 
-    paths.forEach((path) => {
+    const delete_path = row[0].paths.filter((path) => paths.includes(path) || !paths.length)
+    delete_path.forEach((path) => {
       if (existsSync(path)) {
+        row[0].size -= statSync(path).size
         rmSync(path)
       }
     })
 
-    const fontPaths = row[0].paths.filter((path) => !paths.includes(path) || !paths.length)
+    const fontPaths = row[0].paths.filter((path) => !delete_path.includes(path))
     if (fontPaths.length) {
-      await this.ctx.model.set('fonts', { name }, { paths: fontPaths, updatedTime: new Date() })
+      await this.ctx.model.set('fonts', { name }, { paths: fontPaths, size: row[0].size, updatedTime: new Date() })
     }
     else {
       await this.ctx.model.remove('fonts', { name })
