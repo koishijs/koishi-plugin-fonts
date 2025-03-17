@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { createWriteStream, existsSync, mkdirSync, rmSync, statSync } from 'fs'
+import { createWriteStream, existsSync, mkdirSync, rmSync } from 'fs'
 import { mkdir, rename } from 'fs/promises'
 import { basename, resolve } from 'path'
 import { Readable } from 'stream'
@@ -16,6 +16,7 @@ declare module 'koishi' {
 
   interface Tables {
     fonts: Font
+    fontFaceSet: FontFace
   }
 }
 
@@ -28,7 +29,7 @@ declare module '@koishijs/console' {
 
   interface Events {
     'fonts/register'(name: string, paths: string[]): void
-    'fonts/delete'(name: string, paths: string[]): void
+    'fonts/delete'(name: string, fonts: FontFace[]): void
     'fonts/download'(name: string, url: string[]): void
     'fonts/cancel'(name: string, url: string[]): void
   }
@@ -36,10 +37,20 @@ declare module '@koishijs/console' {
 
 interface Font {
   name: string
-  paths: string[]
+  fontFaceSet: string[] | FontFace[]
   size: number
   createdTime: Date
   updatedTime: Date
+}
+
+interface FontFace {
+  id: string
+  fileName: string
+  path: string
+  size: number
+  descriptors?: FontFaceDescriptors
+  createdTime?: Date
+  updatedTime?: Date
 }
 
 class FontsProvider extends DataService<FontsProvider.Payload> {
@@ -58,8 +69,8 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
     )
 
     ctx.console.addListener('fonts/register', this.fonts.register)
-    ctx.console.addListener('fonts/delete', async (name, paths) => {
-      await this.fonts.delete(name, paths)
+    ctx.console.addListener('fonts/delete', async (name, fonts) => {
+      await this.fonts.delete(name, fonts)
       await this.refresh(true)
     })
     ctx.console.addListener('fonts/download', async (name, urls) => {
@@ -67,8 +78,9 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
         name,
         files: urls.map((url) => ({
           url,
-          contentLength: 0,
           downloaded: 0,
+          contentLength: 0,
+          finished: false,
           cancel: false,
           cancelled: false,
           failure: false,
@@ -89,7 +101,7 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
         if (
           handle.files
             .filter((file) => !file.failure)
-            .every((file) => file.contentLength > 0 && file.downloaded === file.contentLength)
+            .every((file) => file.finished)
         ) {
           clearInterval(timer)
           setTimeout(async () => {
@@ -147,8 +159,9 @@ namespace FontsProvider {
     name: string
     files: {
       url: string
-      contentLength: number
       downloaded: number
+      contentLength: number
+      finished: boolean
       cancel: boolean
       cancelled: boolean
       failure: boolean
@@ -172,7 +185,7 @@ class Fonts extends Service {
       'fonts',
       {
         name: { type: 'string', length: 50, nullable: false },
-        paths: { type: 'list', nullable: false },
+        fontFaceSet: { type: 'list', nullable: false },
         size: { type: 'unsigned', nullable: false },
         createdTime: { type: 'timestamp', nullable: false },
         updatedTime: { type: 'timestamp', nullable: false },
@@ -180,6 +193,29 @@ class Fonts extends Service {
       {
         primary: 'name',
       })
+    ctx.model.extend(
+      'fontFaceSet',
+      {
+        'id': { type: 'string', nullable: false },
+        'fileName': { type: 'string', nullable: false },
+        'path': { type: 'string', nullable: false },
+        'size': { type: 'unsigned', nullable: false },
+        'descriptors.ascentOverride': { type: 'string' },
+        'descriptors.descentOverride': { type: 'string' },
+        'descriptors.display': { type: 'string' },
+        'descriptors.featureSettings': { type: 'string' },
+        'descriptors.lineGapOverride': { type: 'string' },
+        'descriptors.stretch': { type: 'string' },
+        'descriptors.style': { type: 'string' },
+        'descriptors.unicodeRange': { type: 'text' },
+        'descriptors.weight': { type: 'string' },
+        'createdTime': { type: 'timestamp', nullable: false },
+        'updatedTime': { type: 'timestamp', nullable: false },
+      },
+      {
+        primary: 'id',
+      },
+    )
     ctx.plugin(FontsProvider, this)
   }
 
@@ -189,28 +225,41 @@ class Fonts extends Service {
   }
 
   async list(): Promise<Font[]> {
-    return await this.ctx.model.get('fonts', {})
+    const fonts = await this.ctx.model.get('fonts', {})
+    for (let i = 0; i < fonts.length; i++) {
+      fonts[i].fontFaceSet = await this.ctx.model.get('fontFaceSet', fonts[i].fontFaceSet as string[])
+    }
+    return fonts
   }
 
   register(name: string, paths: string[]) {
     this.ctx.logger.info('register', name, paths)
   }
 
-  async delete(name: string, paths: string[]) {
+  async delete(name: string, fonts: FontFace[]) {
+    this.ctx.logger.info('delete', name, fonts)
     const row = await this.ctx.model.get('fonts', { name })
     if (!row.length) return
-
-    const delete_path = row[0].paths.filter((path) => paths.includes(path) || !paths.length)
-    delete_path.forEach((path) => {
-      if (existsSync(path)) {
-        row[0].size -= statSync(path).size
-        rmSync(path)
+    const fontIdSet = new Set(row[0].fontFaceSet as string[])
+    this.ctx.logger.info('delete', name, fontIdSet)
+    this.ctx.logger.info(fontIdSet.values())
+    this.ctx.logger.info(fontIdSet.has('12'))
+    this.ctx.logger.info(typeof row[0].fontFaceSet[0])
+    const deleteFontSet = fonts.filter((font) => fontIdSet.has(font.id))
+    this.ctx.logger.info('delete', name, deleteFontSet)
+    const deleteFontIdSet = deleteFontSet.map((font) => font.id)
+    await Promise.all(deleteFontIdSet.map((id) => this.ctx.model.remove('fontFaceSet', { id })))
+    deleteFontSet.forEach((font) => {
+      if (existsSync(font.path)) {
+        row[0].size -= font.size
+        rmSync(font.path)
       }
     })
 
-    const fontPaths = row[0].paths.filter((path) => !delete_path.includes(path))
-    if (fontPaths.length) {
-      await this.ctx.model.set('fonts', { name }, { paths: fontPaths, size: row[0].size, updatedTime: new Date() })
+    const fontSet = row[0].fontFaceSet
+      .filter((id: string) => !deleteFontIdSet.includes(id)) as string[]
+    if (fontSet.length) {
+      await this.ctx.model.set('fonts', { name }, { fontFaceSet: fontSet, size: row[0].size, updatedTime: new Date() })
     }
     else {
       await this.ctx.model.remove('fonts', { name })
@@ -218,28 +267,47 @@ class Fonts extends Service {
   }
 
   async download(name: string, urls: string[], handle: FontsProvider.Download) {
-    const paths = await Promise.all(urls.map((url, index) => this.downloadOne(name, url, handle.files[index])))
-    const size = handle.files.reduce((sum, file) => sum + file.contentLength, 0)
-    const time = new Date()
-    this.ctx.logger.info(paths)
+    const downloads =
+      await Promise.allSettled(urls.map((url, index) => this.downloadOne(name, url, handle.files[index])))
+    const fonts =
+      downloads.filter((result) => result.status === 'fulfilled').map((result) => result.value as FontFace)
+    this.ctx.logger.info('download finish', fonts.length, fonts)
+    if (fonts.length === 0) return
+
+    const size = fonts.reduce((sum, font) => sum + font.size, 0)
+
+    // TODO: parse font descriptors by using fontkit
+    for (let i = 0; i < fonts.length; i++) {
+      const font = fonts[i]
+      fonts[i] = await this.ctx.model.create('fontFaceSet', {
+        ...font,
+        createdTime: new Date(),
+        updatedTime: new Date(),
+      })
+    }
     const row = await this.ctx.model.get('fonts', { name })
-
-    const fontPaths = paths.filter((path) => path.trim().length > 0)
-    if (fontPaths.length === 0) return
-
+    this.ctx.logger.info(fonts.length, fonts)
     if (row.length) {
       await this.ctx.model.set(
         'fonts',
         { name },
         {
-          paths: [...row[0].paths, ...paths],
+          fontFaceSet: [...row[0].fontFaceSet as string[], ...fonts.map((font) => font.id)],
           size: row[0].size + size,
-          updatedTime: time,
+          updatedTime: new Date(),
         },
       )
     }
     else {
-      await this.ctx.model.create('fonts', { name, paths, size, createdTime: time, updatedTime: time })
+      await this.ctx.model.create(
+        'fonts',
+        {
+          name, fontFaceSet: fonts.map((font) => font.id),
+          size,
+          createdTime: new Date(),
+          updatedTime: new Date(),
+        },
+      )
     }
   }
 
@@ -253,7 +321,11 @@ class Fonts extends Service {
    * Download a font from the given URL and save it to the `data/fonts` directory.
    * The file name will be appended with the hash of the file content.
    */
-  async downloadOne(name: string, url: string, handle: FontsProvider.Download['files'][number]) {
+  async downloadOne(
+    name: string,
+    url: string,
+    handle: FontsProvider.Download['files'][number],
+  ): Promise<FontFace | void> {
     this.ctx.logger.info('download', name, url)
     const controller = new AbortController()
     const { signal } = controller
@@ -265,9 +337,7 @@ class Fonts extends Service {
     const output = createWriteStream(tempFilePath)
 
     const length = parseInt(headers.get('content-length'))
-    if (length) {
-      handle.contentLength = length
-    }
+    handle.contentLength = length ? length : 0
 
     // resolve file name from headers.
     const contentDisposition = headers.get('content-disposition')
@@ -315,7 +385,7 @@ class Fonts extends Service {
     readable.pipe(hash)
     readable.pipe(output)
 
-    return await new Promise<string>((_resolve, reject) => {
+    return await new Promise<FontFace | void>((_resolve, _reject) => {
       const cleanup = () => {
         readable.unpipe(output)
         readable.unpipe(hash)
@@ -346,7 +416,7 @@ class Fonts extends Service {
 
         controller.abort()
         handle.cancelled = true
-        _resolve('')
+        _reject(handle.failure ? new Error('download failure') : new Error('download cancelled'))
       }
 
       readable.on('error', async (err) => {
@@ -372,7 +442,13 @@ class Fonts extends Service {
         const path = resolve(this.root, folderName, name)
         await rename(tempFilePath, path)
         this.ctx.logger.info('download finish', name, sha256, path)
-        _resolve(path)
+        handle.finished = true
+        _resolve({
+          id: crypto.randomUUID().replace('-', ''),
+          fileName: name,
+          path,
+          size: handle.downloaded,
+        })
       })
     })
   }

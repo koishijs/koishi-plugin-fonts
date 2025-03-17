@@ -27,38 +27,29 @@ function createDownload() {
 type Download = typeof store.fonts.downloads[0]
 
 const disable = (download: Download) =>
-  download.files.some((file) => file.contentLength > 0 && file.downloaded === file.contentLength)
+  download.files.some((file) => file.finished)
 
-const disableOne = (file) =>
-  (file.contentLength > 0 && file.downloaded === file.contentLength) ||
-  file.cancel
+const disableOne = (file) => file.finished || file.cancel
 
 const indeterminate = (file) => file.failure || file.cancel
 
 const status = (file): 'success' | 'warning' | 'exception' => {
   if (file.failure) return 'exception'
   if (file.cancel) return 'warning'
-  if (file.downloaded === file.contentLength) return 'success'
+  if (file.finished) return 'success'
 }
 
 const percentage = (file) =>
-  file.contentLength ? Math.floor((file.downloaded / file.contentLength) * 100) : 0
+  file.contentLength ? Math.floor((file.downloaded / file.contentLength) * 100) : file.finished ? 100 : 0
 
-async function cancel(name, paths) {
+function cancel(name, paths) {
   send('fonts/cancel', name, paths)
 }
 
-async function deleteFonts(name, paths) {
-  send('fonts/delete', name, paths)
+function deleteFonts(name, fonts) {
+  send('fonts/delete', name, fonts)
 }
 
-function getFileName(filePath: string): string {
-  const path = filePath.split(/[\\/]/)
-  if (!path[path.length - 1]) {
-    path.pop()
-  }
-  return path[path.length - 1]
-}
 </script>
 
 <template>
@@ -131,17 +122,17 @@ function getFileName(filePath: string): string {
         <el-table v-if="store.fonts.fonts.length !== 0" :data="store.fonts.fonts" class="fonts-list" ref="rootRef">
           <el-table-column type="expand">
             <template #default="scope">
-              <el-row class="paths" v-for="(path, index) in scope.row.paths" :key="index">
+              <el-row class="paths" v-for="(font, index) in scope.row.fontFaceSet" :key="index">
                 <el-col :span="3"></el-col>
                 <el-col :span="14">
-                  <el-popover :content="path" width="200" placement="top-start">
+                  <el-popover :content="font.path" width="200" placement="top-start">
                     <template #reference>
-                      <div class="truncate">{{ getFileName(path) }}</div>
+                      <div class="truncate">{{ font.fileName }}</div>
                     </template>
                   </el-popover>
                 </el-col>
                 <el-col :span="1" class="button-container">
-                  <el-button @click="deleteFonts(scope.row.name, [path])" plain>
+                  <el-button @click="deleteFonts(scope.row.name, [font])" plain>
                     <k-icon name="delete" />
                   </el-button>
                 </el-col>
@@ -152,7 +143,7 @@ function getFileName(filePath: string): string {
           <el-table-column label="大小" prop="size" />
           <el-table-column label="操作">
             <template #default="scope">
-              <el-button @click="deleteFonts(scope.row.name, [])" plain>
+              <el-button @click="deleteFonts(scope.row.name, scope.row.fontFaceSet)" plain>
                 <k-icon name="delete" />
               </el-button>
             </template>
