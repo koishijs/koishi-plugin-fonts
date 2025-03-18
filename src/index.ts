@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
-import { createWriteStream, existsSync, mkdirSync, rmSync } from 'fs'
-import { mkdir, rename } from 'fs/promises'
+import { createWriteStream } from 'fs'
+import { access, constants, mkdir, rename, rm } from 'fs/promises'
 import { basename, resolve } from 'path'
 import { Readable } from 'stream'
 import { ReadableStream } from 'stream/web'
@@ -63,9 +63,9 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
       process.env.KOISHI_BASE
         ? [process.env.KOISHI_BASE + '/dist/index.js', process.env.KOISHI_BASE + '/dist/style.css']
         : {
-            dev: resolve(__dirname, '../client/index.ts'),
-            prod: resolve(__dirname, '../dist'),
-          },
+          dev: resolve(__dirname, '../client/index.ts'),
+          prod: resolve(__dirname, '../dist'),
+        },
     )
 
     ctx.console.addListener('fonts/register', this.fonts.register)
@@ -242,19 +242,19 @@ class Fonts extends Service {
     if (!row.length) return
     const fontIdSet = new Set(row[0].fontFaceSet as string[])
     this.ctx.logger.info('delete', name, fontIdSet)
-    this.ctx.logger.info(fontIdSet.values())
-    this.ctx.logger.info(fontIdSet.has('12'))
-    this.ctx.logger.info(typeof row[0].fontFaceSet[0])
+
     const deleteFontSet = fonts.filter((font) => fontIdSet.has(font.id))
-    this.ctx.logger.info('delete', name, deleteFontSet)
     const deleteFontIdSet = deleteFontSet.map((font) => font.id)
     await Promise.all(deleteFontIdSet.map((id) => this.ctx.model.remove('fontFaceSet', { id })))
-    deleteFontSet.forEach((font) => {
-      if (existsSync(font.path)) {
+    await Promise.all(deleteFontSet.map(async (font) => {
+      try {
+        await access(font.path, constants.F_OK)
         row[0].size -= font.size
-        rmSync(font.path)
+        await rm(font.path)
+      } catch (err) {
+        console.warn(`Failed to delete font file: ${font.path}`, err.message)
       }
-    })
+    }))
 
     const fontSet = row[0].fontFaceSet
       .filter((id: string) => !deleteFontIdSet.includes(id)) as string[]
@@ -271,7 +271,6 @@ class Fonts extends Service {
       await Promise.allSettled(urls.map((url, index) => this.downloadOne(name, url, handle.files[index])))
     const fonts =
       downloads.filter((result) => result.status === 'fulfilled').map((result) => result.value as FontFace)
-    this.ctx.logger.info('download finish', fonts.length, fonts)
     if (fonts.length === 0) return
 
     const size = fonts.reduce((sum, font) => sum + font.size, 0)
@@ -286,7 +285,6 @@ class Fonts extends Service {
       })
     }
     const row = await this.ctx.model.get('fonts', { name })
-    this.ctx.logger.info(fonts.length, fonts)
     if (row.length) {
       await this.ctx.model.set(
         'fonts',
@@ -332,9 +330,7 @@ class Fonts extends Service {
     const { data, headers } = await this.ctx.http<ReadableStream>(url, { responseType: 'stream', signal })
     const hash = createHash('sha256', { emitClose: false }).setEncoding('hex')
     const folderName = sanitize(name)
-    mkdirSync(resolve(this.root, folderName), { recursive: true })
-    const tempFilePath = resolve(this.root, folderName, folderName + `.${Date.now()}.tmp`)
-    const output = createWriteStream(tempFilePath)
+    await mkdir(resolve(this.root, folderName), { recursive: true })
 
     const length = parseInt(headers.get('content-length'))
     handle.contentLength = length ? length : 0
@@ -348,6 +344,8 @@ class Fonts extends Service {
     else {
       name = basename(url)
     }
+    const tempFilePath = resolve(this.root, folderName, name + `.${Date.now()}.tmp`)
+    const output = createWriteStream(tempFilePath)
 
     /*
      * TODO: handle zip 7z rar...
@@ -385,8 +383,8 @@ class Fonts extends Service {
     readable.pipe(hash)
     readable.pipe(output)
 
-    return await new Promise<FontFace | void>((_resolve, _reject) => {
-      const cleanup = () => {
+    return await new Promise<FontFace | void>(async (_resolve, _reject) => {
+      const cleanup = async () => {
         readable.unpipe(output)
         readable.unpipe(hash)
 
@@ -396,9 +394,9 @@ class Fonts extends Service {
 
         if (!output.destroyed) {
           // still emit data event after destroy and clear buffer
-          output.end(() => {
+          output.end(async () => {
             output.destroy()
-            rmSync(tempFilePath)
+            await rm(tempFilePath)
           })
         }
         if (!hash.destroyed) {
@@ -421,12 +419,12 @@ class Fonts extends Service {
 
       readable.on('error', async (err) => {
         handle.failure = true
-        cleanup()
+        await cleanup()
       })
 
       readable.on('data', async (chunk) => {
         if (handle.cancel) {
-          cleanup()
+          await cleanup()
         }
         handle.downloaded += chunk.length
       })
@@ -436,11 +434,17 @@ class Fonts extends Service {
       */
       hash.on('finish', async () => {
         if (handle.cancel) {
-          cleanup()
+          await cleanup()
         }
         const sha256 = hash.read() as string
         const path = resolve(this.root, folderName, name)
-        await rename(tempFilePath, path)
+        try {
+          await rename(tempFilePath, path)
+        } catch (err) {
+          this.ctx.logger.warn('Wait for system cache', err.message)
+          setTimeout(() => {}, 100)
+          await rename(tempFilePath, path)
+        }
         this.ctx.logger.info('download finish', name, sha256, path)
         handle.finished = true
         _resolve({
