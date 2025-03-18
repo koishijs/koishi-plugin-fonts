@@ -63,9 +63,9 @@ class FontsProvider extends DataService<FontsProvider.Payload> {
       process.env.KOISHI_BASE
         ? [process.env.KOISHI_BASE + '/dist/index.js', process.env.KOISHI_BASE + '/dist/style.css']
         : {
-          dev: resolve(__dirname, '../client/index.ts'),
-          prod: resolve(__dirname, '../dist'),
-        },
+            dev: resolve(__dirname, '../client/index.ts'),
+            prod: resolve(__dirname, '../dist'),
+          },
     )
 
     ctx.console.addListener('fonts/register', this.fonts.register)
@@ -251,7 +251,8 @@ class Fonts extends Service {
         await access(font.path, constants.F_OK)
         row[0].size -= font.size
         await rm(font.path)
-      } catch (err) {
+      }
+      catch (err) {
         console.warn(`Failed to delete font file: ${font.path}`, err.message)
       }
     }))
@@ -383,7 +384,7 @@ class Fonts extends Service {
     readable.pipe(hash)
     readable.pipe(output)
 
-    return await new Promise<FontFace | void>(async (_resolve, _reject) => {
+    return await new Promise<FontFace | void>((_resolve, _reject) => {
       const cleanup = async () => {
         readable.unpipe(output)
         readable.unpipe(hash)
@@ -440,7 +441,8 @@ class Fonts extends Service {
         const path = resolve(this.root, folderName, name)
         try {
           await rename(tempFilePath, path)
-        } catch (err) {
+        }
+        catch (err) {
           this.ctx.logger.warn('Wait for system cache', err.message)
           setTimeout(() => {}, 100)
           await rename(tempFilePath, path)
