@@ -15,8 +15,7 @@ declare module 'koishi' {
   }
 
   interface Tables {
-    fonts: Font
-    fontFaceSet: FontFace
+    font: Font
   }
 }
 
@@ -29,28 +28,19 @@ declare module '@koishijs/console' {
 
   interface Events {
     'fonts/register'(name: string, paths: string[]): void
-    'fonts/delete'(name: string, fonts: FontFace[]): void
+    'fonts/delete'(name: string, fonts: Font[]): void
     'fonts/download'(name: string, url: string[]): void
     'fonts/cancel'(name: string, url: string[]): void
   }
 }
 
 interface Font {
-  name: string
-  fontFaceSet: string[] | FontFace[]
-  size: number
-  createdTime: Date
-  updatedTime: Date
-}
-
-interface FontFace {
-  id: string
+  id?: number
+  family?: string
   fileName: string
-  path: string
   size: number
+  path: string
   descriptors?: FontFaceDescriptors
-  createdTime?: Date
-  updatedTime?: Date
 }
 
 class FontsProvider extends DataService<FontsProvider.Payload> {
@@ -182,24 +172,13 @@ class Fonts extends Service {
   constructor(ctx: Context, public config: Fonts.Config) {
     super(ctx, 'fonts', true)
     ctx.model.extend(
-      'fonts',
+      'font',
       {
-        name: { type: 'string', length: 50, nullable: false },
-        fontFaceSet: { type: 'list', nullable: false },
-        size: { type: 'unsigned', nullable: false },
-        createdTime: { type: 'timestamp', nullable: false },
-        updatedTime: { type: 'timestamp', nullable: false },
-      },
-      {
-        primary: 'name',
-      })
-    ctx.model.extend(
-      'fontFaceSet',
-      {
-        'id': { type: 'string', nullable: false },
+        'id': { type: 'unsigned', nullable: false },
+        'family': { type: 'string', length: 50, nullable: false },
         'fileName': { type: 'string', nullable: false },
-        'path': { type: 'string', nullable: false },
         'size': { type: 'unsigned', nullable: false },
+        'path': { type: 'string', nullable: false },
         'descriptors.ascentOverride': { type: 'string' },
         'descriptors.descentOverride': { type: 'string' },
         'descriptors.display': { type: 'string' },
@@ -209,13 +188,11 @@ class Fonts extends Service {
         'descriptors.style': { type: 'string' },
         'descriptors.unicodeRange': { type: 'text' },
         'descriptors.weight': { type: 'string' },
-        'createdTime': { type: 'timestamp', nullable: false },
-        'updatedTime': { type: 'timestamp', nullable: false },
       },
       {
         primary: 'id',
-      },
-    )
+        autoInc: true,
+      })
     ctx.plugin(FontsProvider, this)
   }
 
@@ -225,86 +202,53 @@ class Fonts extends Service {
   }
 
   async list(): Promise<Font[]> {
-    const fonts = await this.ctx.model.get('fonts', {})
-    for (let i = 0; i < fonts.length; i++) {
-      fonts[i].fontFaceSet = await this.ctx.model.get('fontFaceSet', fonts[i].fontFaceSet as string[])
-    }
-    return fonts
+    return await this.ctx.model.get('font', {})
+  }
+
+  async get(families: string[]) {
+    // this.ctx.model
+    // .select('font')
+    // .join(['font', 'fonts'], (f, fs) => $.in(fs.id, f.fonts))
+    // .where(row => &.in(row.font.name, families))
   }
 
   register(name: string, paths: string[]) {
     this.ctx.logger.info('register', name, paths)
   }
 
-  async delete(name: string, fonts: FontFace[]) {
-    this.ctx.logger.info('delete', name, fonts)
-    const row = await this.ctx.model.get('fonts', { name })
+  async delete(family: string, fonts: Font[]) {
+    const row = await this.ctx.model.get('font', { family })
     if (!row.length) return
-    const fontIdSet = new Set(row[0].fontFaceSet as string[])
-    this.ctx.logger.info('delete', name, fontIdSet)
 
-    const deleteFontSet = fonts.filter((font) => fontIdSet.has(font.id))
-    const deleteFontIdSet = deleteFontSet.map((font) => font.id)
-    await Promise.all(deleteFontIdSet.map((id) => this.ctx.model.remove('fontFaceSet', { id })))
-    await Promise.all(deleteFontSet.map(async (font) => {
+    const rowFontIds = new Set(row.map((rowFont) => rowFont.id))
+    const deleteFont = fonts.filter((font) => rowFontIds.has(font.id))
+    await Promise.all(deleteFont.map((f) => this.ctx.model.remove('font', f)))
+    await Promise.all(deleteFont.map(async (f) => {
       try {
-        await access(font.path, constants.F_OK)
-        row[0].size -= font.size
-        await rm(font.path)
+        await access(f.path, constants.F_OK)
+        await rm(f.path)
       }
       catch (err) {
-        console.warn(`Failed to delete font file: ${font.path}`, err.message)
+        console.warn(`Failed to delete file: ${f.path}`, err.message)
       }
     }))
-
-    const fontSet = row[0].fontFaceSet
-      .filter((id: string) => !deleteFontIdSet.includes(id)) as string[]
-    if (fontSet.length) {
-      await this.ctx.model.set('fonts', { name }, { fontFaceSet: fontSet, size: row[0].size, updatedTime: new Date() })
-    }
-    else {
-      await this.ctx.model.remove('fonts', { name })
-    }
   }
 
-  async download(name: string, urls: string[], handle: FontsProvider.Download) {
+  async download(family: string, urls: string[], handle: FontsProvider.Download) {
     const downloads =
-      await Promise.allSettled(urls.map((url, index) => this.downloadOne(name, url, handle.files[index])))
+      await Promise.allSettled(urls.map((url, index) => this.downloadOne(family, url, handle.files[index])))
     const fonts =
-      downloads.filter((result) => result.status === 'fulfilled').map((result) => result.value as FontFace)
+      downloads.filter((result) => result.status === 'fulfilled').map((result) => result.value as Font)
     if (fonts.length === 0) return
-
-    const size = fonts.reduce((sum, font) => sum + font.size, 0)
 
     // TODO: parse font descriptors by using fontkit
     for (let i = 0; i < fonts.length; i++) {
       const font = fonts[i]
-      fonts[i] = await this.ctx.model.create('fontFaceSet', {
-        ...font,
-        createdTime: new Date(),
-        updatedTime: new Date(),
-      })
-    }
-    const row = await this.ctx.model.get('fonts', { name })
-    if (row.length) {
-      await this.ctx.model.set(
-        'fonts',
-        { name },
-        {
-          fontFaceSet: [...row[0].fontFaceSet as string[], ...fonts.map((font) => font.id)],
-          size: row[0].size + size,
-          updatedTime: new Date(),
-        },
-      )
-    }
-    else {
       await this.ctx.model.create(
-        'fonts',
+        'font',
         {
-          name, fontFaceSet: fonts.map((font) => font.id),
-          size,
-          createdTime: new Date(),
-          updatedTime: new Date(),
+          ...font,
+          family,
         },
       )
     }
@@ -320,11 +264,11 @@ class Fonts extends Service {
    * Download a font from the given URL and save it to the `data/fonts` directory.
    * The file name will be appended with the hash of the file content.
    */
-  async downloadOne(
+  protected async downloadOne(
     name: string,
     url: string,
     handle: FontsProvider.Download['files'][number],
-  ): Promise<FontFace | void> {
+  ): Promise<Font | void> {
     this.ctx.logger.info('download', name, url)
     const controller = new AbortController()
     const { signal } = controller
@@ -384,7 +328,7 @@ class Fonts extends Service {
     readable.pipe(hash)
     readable.pipe(output)
 
-    return await new Promise<FontFace | void>((_resolve, _reject) => {
+    return await new Promise<Font | void>((_resolve, _reject) => {
       const cleanup = async () => {
         readable.unpipe(output)
         readable.unpipe(hash)
@@ -450,7 +394,6 @@ class Fonts extends Service {
         this.ctx.logger.info('download finish', name, sha256, path)
         handle.finished = true
         _resolve({
-          id: crypto.randomUUID().replace('-', ''),
           fileName: name,
           path,
           size: handle.downloaded,

@@ -50,6 +50,18 @@ function deleteFonts(name, fonts) {
   send('fonts/delete', name, fonts)
 }
 
+function groupByFamily(data) {
+  const grouped = {}
+  data.forEach((item) => {
+    if (!grouped[item.family]) {
+      grouped[item.family] = { family: item.family, size: 0, children: [] }
+    }
+    grouped[item.family].children.push(item)
+    grouped[item.family].size += item.size
+  })
+  return Object.values(grouped)
+}
+
 </script>
 
 <template>
@@ -119,31 +131,33 @@ function deleteFonts(name, fonts) {
           <el-empty description="暂无字体" />
         </template>
 
-        <el-table v-if="store.fonts.fonts.length !== 0" :data="store.fonts.fonts" class="fonts-list" ref="rootRef">
+        <el-table v-if="store.fonts.fonts.length !== 0"
+                  :data="groupByFamily(store.fonts.fonts)"
+                  row-kay="family"
+                  class="fonts-list"
+                  ref="rootRef"
+                  border>
           <el-table-column type="expand">
             <template #default="scope">
-              <el-row class="paths" v-for="(font, index) in scope.row.fontFaceSet" :key="index">
-                <el-col :span="3"></el-col>
-                <el-col :span="14">
-                  <el-popover :content="font.path" width="200" placement="top-start">
-                    <template #reference>
-                      <div class="truncate">{{ font.fileName }}</div>
-                    </template>
-                  </el-popover>
-                </el-col>
-                <el-col :span="1" class="button-container">
-                  <el-button @click="deleteFonts(scope.row.name, [font])" plain>
-                    <k-icon name="delete" />
-                  </el-button>
-                </el-col>
-              </el-row>
+              <el-table :data="scope.row.children" border>
+                <el-table-column label="文件名" prop="fileName" />
+                <el-table-column label="路径" prop="path" />
+                <el-table-column label="大小" prop="size" />
+                <el-table-column label="操作">
+                  <template #default="scope">
+                    <el-button @click="deleteFonts(scope.row.family, [scope.row])" plain>
+                      <k-icon name="delete" />
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
             </template>
           </el-table-column>
-          <el-table-column label="字体名" prop="name" />
+          <el-table-column label="字体名" prop="family" />
           <el-table-column label="大小" prop="size" />
           <el-table-column label="操作">
             <template #default="scope">
-              <el-button @click="deleteFonts(scope.row.name, scope.row.fontFaceSet)" plain>
+              <el-button @click="deleteFonts(scope.row.family, scope.row.children)" plain>
                 <k-icon name="delete" />
               </el-button>
             </template>
