@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
-import { createWriteStream } from 'fs'
-import { access, constants, mkdir, rename, rm } from 'fs/promises'
+import { createReadStream, createWriteStream } from 'fs'
+import { access, constants, mkdir, readdir, rename, rm, stat } from 'fs/promises'
 import { basename, resolve } from 'path'
 import { Readable } from 'stream'
 import { ReadableStream } from 'stream/web'
@@ -13,14 +13,15 @@ import { Provider } from './provider'
 
 export class Fonts extends Service {
   private root: string
+  private fonts: Fonts.Font[]
 
   constructor(ctx: Context, public config: Fonts.Config) {
     super(ctx, 'fonts')
     ctx.model.extend(
       'fonts',
       {
-        'id': { type: 'unsigned', nullable: false },
-        'family': { type: 'string', length: 50, nullable: false },
+        'id': { type: 'string', length: 64, nullable: false },
+        'family': { type: 'string', length: 64, nullable: false },
         'fileName': { type: 'string', nullable: false },
         'size': { type: 'unsigned', nullable: false },
         'path': { type: 'string', nullable: false },
@@ -36,7 +37,6 @@ export class Fonts extends Service {
       },
       {
         primary: 'id',
-        autoInc: true,
       })
     ctx.plugin(Provider, this)
   }
@@ -44,18 +44,24 @@ export class Fonts extends Service {
   async start() {
     this.root = resolve(this.ctx.baseDir, this.config.root)
     await mkdir(this.root, { recursive: true })
-    this.ctx.logger.info(this.root)
+    this.fonts = []
   }
 
   async list(): Promise<Fonts.Font[]> {
     return await this.ctx.model.get('fonts', {})
   }
 
-  async get(families: string[]) {
-    return (await this.ctx.model
+  async get(families: string[]): Promise<Fonts.Font[]> {
+    const db = await this.ctx.model
       .select('fonts')
       .where((row) => $.in(row.family, families))
-      .execute())
+      .execute()
+    const unique = this.fonts.filter((font) =>
+      !db.some((f) => f.id === font.id))
+    const update = db.map((exist) =>
+      this.fonts.find((font) => font.id === exist.id) || exist)
+
+    return [...update, ...unique]
       .map((f) => {
         const font = { ...f }
         font.path = `${pathToFileURL(font.path)}`
@@ -69,8 +75,82 @@ export class Fonts extends Service {
       })
   }
 
-  register(name: string, paths: string[]) {
-    this.ctx.logger.info('register', name, paths)
+  register: Fonts.Register = async (...args: Fonts.RegisterArgs) => {
+    const fonts = Array.isArray(args[0]) ? args[0] : []
+
+    if (!Array.isArray(args[0])) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const [family, param, config] = args
+      const paths: string[] = Array.isArray(param) ? param : []
+
+      if (!Array.isArray(param)) {
+        const isDirectory = async (path: string): Promise<boolean> => {
+          try {
+            await access(path, constants.F_OK)
+            return (await stat(path)).isDirectory()
+          }
+          catch (err) {
+            this.ctx.logger.error(`Failed to access path: ${path}`, err.message)
+            return false
+          }
+        }
+        const readAllFiles = async (folderPath: string) => {
+          const readFolder = async (path: string) => {
+            const entries = await readdir(path, { withFileTypes: true })
+            for (const entry of entries) {
+              const fullPath = resolve(path, entry.name)
+              if (entry.isDirectory()) {
+                await readFolder(fullPath)
+              }
+              else {
+                paths.push(fullPath)
+              }
+            }
+          }
+          await readFolder(folderPath)
+        }
+        if (await isDirectory(param)) {
+          await readAllFiles(param)
+          this.ctx.logger.info('scanned %d files from folder: %s', paths.length, param)
+        }
+      }
+
+      // TODO: parse font descriptors by using fontkit
+      fonts.push(...(await Promise.all(
+        paths
+          .filter((path) =>
+            ['.woff', '.woff2', '.ttf', '.otf', '.sfnt', '.ttc'].some((ext) => path.endsWith(ext)))
+          .map(async (path) => {
+            const sha256 = createHash('sha256')
+            const fileStat = await stat(path)
+            const fileStream = createReadStream(path)
+            const fileName = basename(path)
+
+            await new Promise<void>((resolve, reject) => {
+              fileStream
+                .on('data', (chunk) => sha256.update(chunk))
+                .on('end', resolve)
+                .on('error', reject)
+            })
+
+            return {
+              id: sha256.digest('hex'),
+              family,
+              fileName,
+              size: fileStat.size,
+              path: path,
+              descriptors: {} as FontFaceDescriptors,
+            }
+          }),
+      )))
+    }
+
+    const unique = fonts.filter((font) =>
+      !this.fonts.some((f) => f.id === font.id))
+    const update = this.fonts.map((exist) =>
+      fonts.find((font) => font.id === exist.id) || exist)
+    this.fonts = [...update, ...unique]
+    this.ctx.logger.info('registed %d fonts', fonts.length)
   }
 
   async delete(family: string, fonts: Fonts.Font[]) {
@@ -127,10 +207,11 @@ export class Fonts extends Service {
     handle: Provider.Download['files'][number],
   ): Promise<Fonts.Font | void> {
     this.ctx.logger.info('download', name, url)
+    const family = name
     const controller = new AbortController()
     const { signal } = controller
     const { data, headers } = await this.ctx.http<ReadableStream>(url, { responseType: 'stream', signal })
-    const hash = createHash('sha256', { emitClose: false }).setEncoding('hex')
+    const hash = createHash('sha256', { emitClose: false })
     const folderName = sanitize(name)
     await mkdir(resolve(this.root, folderName), { recursive: true })
 
@@ -234,27 +315,57 @@ export class Fonts extends Service {
       /**
        * TODO: handle same file
       */
-      hash.on('finish', async () => {
+      output.on('finish', async () => {
         if (handle.cancel) {
           await cleanup()
+          return
         }
-        const sha256 = hash.read() as string
+
+        const sha256 = hash.digest('hex')
         const path = resolve(this.root, folderName, name)
+        let retry = 3
+        let success = false
+
         try {
-          await rename(tempFilePath, path)
+          while (retry--) {
+            try {
+              await rename(tempFilePath, path)
+              success = true
+              break
+            }
+            catch (err) {
+              if (retry) {
+                this.ctx.logger.warn(`Retrying ${3 - retry} times to rename file failed: ${err.message}`)
+                await new Promise((resolve) =>
+                  setTimeout(resolve, 100 * Math.pow(2, 3 - retry)))
+              }
+              else {
+                throw new Error(`Failed to rename file after retrying 3 times: ${err.message}`)
+              }
+            }
+          }
         }
-        catch (err) {
-          this.ctx.logger.warn('Wait for system cache', err.message)
-          setTimeout(() => {}, 100)
-          await rename(tempFilePath, path)
+        finally {
+          if (!success) {
+            this.ctx.logger.warn('Cleaning up temporary file due to failure.')
+            await rm(tempFilePath).catch((err) => {
+              this.ctx.logger.error(`Failed to remove temporary file: ${err.message}`)
+            })
+            handle.failure = true
+            await cleanup()
+          }
+          else {
+            this.ctx.logger.info('Download finished successfully', name, sha256, path)
+            handle.finished = true
+            _resolve({
+              id: sha256,
+              family,
+              fileName: name,
+              path,
+              size: handle.downloaded,
+            })
+          }
         }
-        this.ctx.logger.info('download finish', name, sha256, path)
-        handle.finished = true
-        _resolve({
-          fileName: name,
-          path,
-          size: handle.downloaded,
-        })
       })
     })
   }
@@ -262,12 +373,26 @@ export class Fonts extends Service {
 
 export namespace Fonts {
   export interface Font {
-    id?: number
-    family?: string
+    id: string
+    family: string
     fileName: string
     size: number
     path: string
     descriptors?: FontFaceDescriptors
+  }
+
+  export type RegisterArgs = [string, string | string[], Fonts.RegisterConfig?] | [Fonts.Font[]]
+
+  export interface RegisterConfig {
+    parse?: boolean
+    descriptors?: FontFaceDescriptors
+  }
+
+  export interface Register {
+
+    (family: string, folderPath: string, config?: RegisterConfig): Promise<void>
+    (family: string, paths: string[], config?: RegisterConfig): Promise<void>
+    (fonts: Font[]): Promise<void>
   }
 
   export const Config: z<Config> = z.object({

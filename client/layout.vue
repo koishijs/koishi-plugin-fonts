@@ -142,6 +142,7 @@ function groupByFamily(data) {
               <el-table :data="scope.row.children" border>
                 <el-table-column label="文件名" prop="fileName" />
                 <el-table-column label="路径" prop="path" />
+                <el-table-column label="sha256" prop="id" />
                 <el-table-column label="大小" prop="size" />
                 <el-table-column label="操作">
                   <template #default="scope">

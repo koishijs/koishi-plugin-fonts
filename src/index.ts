@@ -24,6 +24,11 @@ declare module 'koishi' {
   interface Tables {
     fonts: Fonts.Font
   }
+
+  interface Events {
+    // TODO: Add event invocation methods
+    // 'fonts/register'(name: string, paths: string[]): void
+  }
 }
 
 declare module '@koishijs/console' {
@@ -34,7 +39,6 @@ declare module '@koishijs/console' {
   }
 
   interface Events {
-    'fonts/register'(name: string, paths: string[]): void
     'fonts/delete'(name: string, fonts: Fonts.Font[]): void
     'fonts/download'(name: string, url: string[]): void
     'fonts/cancel'(name: string, url: string[]): void
@@ -43,6 +47,7 @@ declare module '@koishijs/console' {
 
 export function apply(ctx: Context, config: Config) {
   ctx.plugin(Fonts, config)
+  // ctx.console.addListener('fonts/register', this.fonts.register)
 
   ctx.inject(['console'], (ctx) => {
     ctx.console.addEntry({

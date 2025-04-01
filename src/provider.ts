@@ -20,7 +20,6 @@ export class Provider extends DataService<Provider.Payload> {
           },
     )
 
-    ctx.console.addListener('fonts/register', this.fonts.register)
     ctx.console.addListener('fonts/delete', async (name, fonts) => {
       await this.fonts.delete(name, fonts)
       await this.refresh(true)
