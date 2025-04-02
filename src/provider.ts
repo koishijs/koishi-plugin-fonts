@@ -2,7 +2,8 @@ import { resolve } from 'path'
 
 import { DataService } from '@koishijs/console'
 
-import type { Fonts } from './font'
+import { Fonts } from './font'
+
 import type { Context } from 'koishi'
 
 export class Provider extends DataService<Provider.Payload> {
@@ -21,7 +22,7 @@ export class Provider extends DataService<Provider.Payload> {
     )
 
     ctx.console.addListener('fonts/delete', async (name, fonts) => {
-      await this.fonts.delete(name, fonts)
+      await Fonts.extract(this.fonts, 'delete')(name, fonts)
       await this.refresh(true)
     })
     ctx.console.addListener('fonts/download', async (name, urls) => {

@@ -48,7 +48,8 @@
     ],
     "services": {
       "required": [
-        "database"
+        "database",
+        "puppeteer"
       ],
       "optional": [
         "console"

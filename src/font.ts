@@ -11,6 +11,9 @@ import sanitize from 'sanitize-filename'
 
 import { Provider } from './provider'
 
+import type { GoToOptions, Page } from 'puppeteer-core'
+import type {} from 'koishi-plugin-puppeteer'
+
 export class Fonts extends Service {
   private root: string
   private fonts: Fonts.Font[]
@@ -22,6 +25,7 @@ export class Fonts extends Service {
       {
         'id': { type: 'string', length: 64, nullable: false },
         'family': { type: 'string', length: 64, nullable: false },
+        'format': { type: 'string', nullable: false },
         'fileName': { type: 'string', nullable: false },
         'size': { type: 'unsigned', nullable: false },
         'path': { type: 'string', nullable: false },
@@ -125,6 +129,8 @@ export class Fonts extends Service {
             const fileStat = await stat(path)
             const fileStream = createReadStream(path)
             const fileName = basename(path)
+            // TODO: Verify the validity of the extension name.
+            const format = fileName.split('.').pop() as Fonts.Font['format']
 
             await new Promise<void>((resolve, reject) => {
               fileStream
@@ -136,6 +142,7 @@ export class Fonts extends Service {
             return {
               id: sha256.digest('hex'),
               family,
+              format,
               fileName,
               size: fileStat.size,
               path: path,
@@ -153,7 +160,36 @@ export class Fonts extends Service {
     this.ctx.logger.info('registed %d fonts', fonts.length)
   }
 
-  async delete(family: string, fonts: Fonts.Font[]) {
+  async createPageWithFonts(
+    families: string[],
+    url: string,
+    gotoOptions?: GoToOptions,
+    beforeGotoPage?: (page: Page) => Promise<void>,
+  ): Promise<Page> {
+    const fonts = await this.get(families)
+    const page = await this.ctx.puppeteer.browser.newPage()
+
+    if (beforeGotoPage) {
+      await beforeGotoPage(page)
+    }
+
+    await page.goto(`${pathToFileURL(url)}`, gotoOptions)
+
+    for (const font of fonts) {
+      await page.evaluate((font) => {
+        const fontFace = new FontFace(
+          font.family,
+          `url(${font.path}) format('${font.format}')`,
+          font.descriptors,
+        )
+        document.fonts.add(fontFace)
+        return fontFace.load()
+      }, font)
+    }
+    return page
+  }
+
+  private async delete(family: string, fonts: Fonts.Font[]) {
     const row = await this.ctx.model.get('fonts', { family })
     if (!row.length) return
 
@@ -169,6 +205,10 @@ export class Fonts extends Service {
         console.warn(`Failed to delete file: ${f.path}`, err.message)
       }
     }))
+  }
+
+  static extract(clazz: Fonts, field: string) {
+    return clazz[field].bind(clazz)
   }
 
   async download(family: string, urls: string[], handle: Provider.Download) {
@@ -201,7 +241,7 @@ export class Fonts extends Service {
    * Download a font from the given URL and save it to the `data/fonts` directory.
    * The file name will be appended with the hash of the file content.
    */
-  protected async downloadOne(
+  private async downloadOne(
     name: string,
     url: string,
     handle: Provider.Download['files'][number],
@@ -229,7 +269,7 @@ export class Fonts extends Service {
     }
     const tempFilePath = resolve(this.root, folderName, name + `.${Date.now()}.tmp`)
     const output = createWriteStream(tempFilePath)
-
+    let format: Fonts.Font['format']
     /*
      * TODO: handle zip 7z rar...
      * in case the filename didn't contains the extension,
@@ -240,25 +280,38 @@ export class Fonts extends Service {
       if (contentType) {
         if (contentType.includes('font/woff')) {
           name += '.woff'
+          format = 'woff'
         }
         else if (contentType.includes('font/woff2')) {
           name += '.woff2'
+          format = 'woff2'
         }
         else if (contentType.includes('font/ttf')) {
           name += '.ttf'
+          format = 'ttf'
         }
         else if (contentType.includes('font/otf')) {
           name += '.otf'
+          format = 'otf'
         }
         else if (contentType.includes('font/sfnt')) {
           name += '.sfnt'
+          format = 'sfnt'
         }
         else if (contentType.includes('font/collection')) {
           name += '.ttc'
+          format = 'ttc'
         }
         else {
           this.ctx.logger.warn('unknown font type', contentType)
         }
+      }
+    }
+    else {
+      const ext = name.split('.').pop()
+      // TODO: Verify the validity of the extension name.
+      if (ext) {
+        format = ext as Fonts.Font['format']
       }
     }
 
@@ -360,6 +413,7 @@ export class Fonts extends Service {
             _resolve({
               id: sha256,
               family,
+              format,
               fileName: name,
               path,
               size: handle.downloaded,
@@ -375,6 +429,7 @@ export namespace Fonts {
   export interface Font {
     id: string
     family: string
+    format: 'woff' | 'woff2' | 'ttf' | 'otf' | 'sfnt' | 'ttc'
     fileName: string
     size: number
     path: string

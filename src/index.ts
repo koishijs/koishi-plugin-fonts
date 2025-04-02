@@ -12,7 +12,7 @@ export { Fonts, Provider, Config }
 export const name = 'fonts'
 
 export const inject = {
-  required: ['database'],
+  required: ['database', 'puppeteer'],
   optional: ['console'],
 }
 
@@ -28,6 +28,7 @@ declare module 'koishi' {
   interface Events {
     // TODO: Add event invocation methods
     // 'fonts/register'(name: string, paths: string[]): void
+    // 'fonts/delete'(name: string, fonts: Fonts.Font[]): void
   }
 }
 
