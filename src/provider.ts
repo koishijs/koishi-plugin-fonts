@@ -22,7 +22,7 @@ export class Provider extends DataService<Provider.Payload> {
     )
 
     ctx.console.addListener('fonts/delete', async (name, fonts) => {
-      await Fonts.extract(this.fonts, 'delete')(name, fonts)
+      await this.fonts.delete(name, fonts)
       await this.refresh(true)
     })
     ctx.console.addListener('fonts/download', async (name, urls) => {

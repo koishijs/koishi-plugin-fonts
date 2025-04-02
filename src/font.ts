@@ -16,6 +16,7 @@ import type {} from 'koishi-plugin-puppeteer'
 
 export class Fonts extends Service {
   private root: string
+  // TODO: thread safety
   private fonts: Fonts.Font[]
 
   constructor(ctx: Context, public config: Fonts.Config) {
@@ -189,7 +190,7 @@ export class Fonts extends Service {
     return page
   }
 
-  private async delete(family: string, fonts: Fonts.Font[]) {
+  async delete(family: string, fonts: Fonts.Font[]) {
     const row = await this.ctx.model.get('fonts', { family })
     if (!row.length) return
 
@@ -205,10 +206,6 @@ export class Fonts extends Service {
         console.warn(`Failed to delete file: ${f.path}`, err.message)
       }
     }))
-  }
-
-  static extract(clazz: Fonts, field: string) {
-    return clazz[field].bind(clazz)
   }
 
   async download(family: string, urls: string[], handle: Provider.Download) {
