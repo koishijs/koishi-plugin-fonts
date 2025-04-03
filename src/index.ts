@@ -12,7 +12,7 @@ export { Fonts, Provider, Config }
 export const name = 'fonts'
 
 export const inject = {
-  required: ['database', 'puppeteer'],
+  required: ['database'],
   optional: ['console'],
 }
 

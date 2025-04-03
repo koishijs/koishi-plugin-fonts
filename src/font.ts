@@ -11,9 +11,6 @@ import sanitize from 'sanitize-filename'
 
 import { Provider } from './provider'
 
-import type { GoToOptions, Page } from 'puppeteer-core'
-import type {} from 'koishi-plugin-puppeteer'
-
 export class Fonts extends Service {
   private root: string
   // TODO: thread safety
@@ -159,35 +156,6 @@ export class Fonts extends Service {
       fonts.find((font) => font.id === exist.id) || exist)
     this.fonts = [...update, ...unique]
     this.ctx.logger.info('registed %d fonts', fonts.length)
-  }
-
-  async createPageWithFonts(
-    families: string[],
-    url: string,
-    gotoOptions?: GoToOptions,
-    beforeGotoPage?: (page: Page) => Promise<void>,
-  ): Promise<Page> {
-    const fonts = await this.get(families)
-    const page = await this.ctx.puppeteer.browser.newPage()
-
-    if (beforeGotoPage) {
-      await beforeGotoPage(page)
-    }
-
-    await page.goto(`${pathToFileURL(url)}`, gotoOptions)
-
-    for (const font of fonts) {
-      await page.evaluate((font) => {
-        const fontFace = new FontFace(
-          font.family,
-          `url(${font.path}) format('${font.format}')`,
-          font.descriptors,
-        )
-        document.fonts.add(fontFace)
-        return fontFace.load()
-      }, font)
-    }
-    return page
   }
 
   async delete(family: string, fonts: Fonts.Font[]) {

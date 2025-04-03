@@ -48,8 +48,7 @@
     ],
     "services": {
       "required": [
-        "database",
-        "puppeteer"
+        "database"
       ],
       "optional": [
         "console"
@@ -63,16 +62,15 @@
     "@haixee/eslint-config": "^2.1.11",
     "@koishijs/client": "^5.30.7",
     "@koishijs/plugin-console": "^5.30.7",
-    "@types/node": "^20.17.24",
+    "@types/node": "^20.17.30",
     "@types/throttle-debounce": "^5.0.2",
-    "@typescript-eslint/parser": "^8.26.2-alpha.9",
-    "esbuild": "^0.20.2",
+    "@typescript-eslint/parser": "^8.29.1-alpha.2",
+    "esbuild": "^0.25.2",
     "esbuild-register": "^3.6.0",
-    "eslint": "^9.22.0",
+    "eslint": "^9.23.0",
     "eslint-plugin-vue": "^9.33.0",
     "koishi": "^4.18.7",
-    "koishi-plugin-puppeteer": "^3.9.0",
-    "typescript": "^5.9.0-dev.20250319",
+    "typescript": "^5.9.0-dev.20250403",
     "yml-register": "^1.2.5"
   },
   "dependencies": {
