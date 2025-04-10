@@ -58,12 +58,8 @@ export class Fonts extends Service {
       .select('fonts')
       .where((row) => $.in(row.family, families))
       .execute()
-    const unique = this.fonts.filter((font) =>
-      !db.some((f) => f.id === font.id))
-    const update = db.map((exist) =>
-      this.fonts.find((font) => font.id === exist.id) || exist)
-
-    return [...update, ...unique]
+    const fonts = this.fonts.filter((font) => families.includes(font.family))
+    return mergeFonts(fonts, db)
       .map((f) => {
         const font = { ...f }
         font.path = `${pathToFileURL(font.path)}`
