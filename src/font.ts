@@ -10,6 +10,7 @@ import { $, Context, Service, z } from 'koishi'
 import sanitize from 'sanitize-filename'
 
 import { Provider } from './provider'
+import { googleFontsParser, mergeFonts } from './utils'
 
 export class Fonts extends Service {
   private root: string
@@ -62,7 +63,7 @@ export class Fonts extends Service {
     return mergeFonts(fonts, db)
       .map((f) => {
         const font = { ...f }
-        font.path = `${pathToFileURL(font.path)}`
+        font.path = font.format === 'google' ? font.path : `${pathToFileURL(font.path)}`
         font.descriptors = Object.entries(font.descriptors).reduce((acc, [key, value]) => {
           if (value !== null) {
             acc[key] = value
@@ -146,12 +147,18 @@ export class Fonts extends Service {
       )))
     }
 
-    const unique = fonts.filter((font) =>
-      !this.fonts.some((f) => f.id === font.id))
-    const update = this.fonts.map((exist) =>
-      fonts.find((font) => font.id === exist.id) || exist)
-    this.fonts = [...update, ...unique]
+    this.fonts = mergeFonts(this.fonts, fonts)
     this.ctx.logger.info('registed %d fonts', fonts.length)
+  }
+
+  googleFontRegister(url: string) {
+    let fonts: Fonts.Font[]
+    if (url.startsWith('https://fonts.googleapis.com/css')) {
+      fonts = googleFontsParser(url)
+      this.fonts = mergeFonts(this.fonts, fonts)
+    } else {
+      this.ctx.logger.warn('Invalid Google Fonts URL:', url)
+    }
   }
 
   async delete(family: string, fonts: Fonts.Font[]) {
@@ -182,12 +189,12 @@ export class Fonts extends Service {
     // TODO: parse font descriptors by using fontkit
     for (let i = 0; i < fonts.length; i++) {
       const font = fonts[i]
-      await this.ctx.model.create(
+      await this.ctx.model.upsert(
         'fonts',
-        {
+        Array.isArray(font) ? font : [{
           ...font,
           family,
-        },
+        }],
       )
     }
   }
@@ -206,8 +213,13 @@ export class Fonts extends Service {
     name: string,
     url: string,
     handle: Provider.Download['files'][number],
-  ): Promise<Fonts.Font | void> {
+  ): Promise<Fonts.Font[] | Fonts.Font | void> {
     this.ctx.logger.info('download', name, url)
+    // 检查 URL 是否为 Google Fonts 的 URL
+    if (url.startsWith('https://fonts.googleapis.com/css')) {
+      return googleFontsParser(url)
+    }
+
     const family = name
     const controller = new AbortController()
     const { signal } = controller
@@ -390,7 +402,7 @@ export namespace Fonts {
   export interface Font {
     id: string
     family: string
-    format: 'woff' | 'woff2' | 'ttf' | 'otf' | 'sfnt' | 'ttc'
+    format: string
     fileName: string
     size: number
     path: string
