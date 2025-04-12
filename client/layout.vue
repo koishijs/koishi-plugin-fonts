@@ -20,7 +20,7 @@ function resetNewDownload() {
 }
 
 function createDownload() {
-  send('fonts/download', newDownload.name, newDownload.urls.split('\n'))
+  send('fonts/download', newDownload.name, newDownload.urls.trim().split('\n'))
   resetNewDownload()
 }
 
@@ -81,7 +81,7 @@ function groupByFamily(data) {
           <el-input class="my-2" v-model="newDownload.name" placeholder="输入字体名称" />
           <el-input class="my-2"
                     v-model="newDownload.urls"
-                    placeholder="输入下载链接，以空行分隔不同路径"
+                    placeholder="输入下载链接，以回车分隔不同路径"
                     type="textarea"
                     :autosize="{ minRows: 4, maxRows: 16 }" />
         </template>

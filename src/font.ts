@@ -297,6 +297,10 @@ export class Fonts extends Service {
     url: string,
     handle: Provider.Download['files'][number],
   ): Promise<Fonts.Font[] | Fonts.Font | void> {
+    if (!url.trim()) {
+      handle.failure = true
+      throw new Error(`Empty URL provided: ${name}`)
+    }
     this.ctx.logger.info('download', name, url)
     // 检查 URL 是否为 Google Fonts 的 URL
     if (url.startsWith('https://fonts.googleapis.com/css')) {
@@ -327,10 +331,10 @@ export class Fonts extends Service {
     const output = createWriteStream(tempFilePath)
     let format: Fonts.Font['format']
     /*
-     * TODO: handle zip 7z rar...
-     * in case the filename didn't contains the extension,
-     * resolve file type from header.
-     */
+    * TODO: handle zip 7z rar...
+    * in case the filename didn't contains the extension,
+    * resolve file type from header.
+    */
     let ext: string
     if (name.includes('.')) {
       ext = name.split('.').pop()
