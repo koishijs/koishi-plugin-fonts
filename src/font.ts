@@ -55,10 +55,27 @@ export class Fonts extends Service {
     })
   }
 
+  /**
+   * Retrieves a list of fonts from the database.
+   *
+   * @returns A promise that resolves to an array of font objects.
+   */
   async list(): Promise<Fonts.Font[]> {
     return await this.ctx.model.get('fonts', {})
   }
 
+  /**
+   * Retrieves a list of fonts based on the specified font families.
+   *
+   * This method waits for any pending write operations to complete before
+   * acquiring a read lock to safely access the font data. It fetches font
+   * information from both the in-memory font list and the database, then
+   * merges the results.
+   *
+   * @param families - An array of font family names to retrieve.
+   * @returns A promise that resolves to an array of `Fonts.Font` objects
+   *          containing the merged font data.
+   */
   async get(families: string[]): Promise<Fonts.Font[]> {
     await this.waitForWritesToComplete()
     return await this.lock.withReadLock(async () => {
@@ -82,6 +99,20 @@ export class Fonts extends Service {
         })
     })
   }
+
+  /**
+   * Registers fonts into the system. This function supports registering fonts
+   * from an array of font descriptors or by scanning a directory for font files.
+   * It ensures thread safety by using a write lock during the registration process.
+   *
+   * @param args: {@link Fonts.Register}
+   *             - The arguments for font registration. It can either be an array
+   *               of font descriptors or a tuple containing the font family name,
+   *               a path (or array of paths) to font files or directories, and
+   *               an optional configuration object.
+   *
+   * @returns A promise that resolves once the fonts have been registered.
+   */
   register: Fonts.Register = async (...args: Fonts.RegisterArgs) => {
     return await this.lock.withWriteLock(async () => {
       const fonts = Array.isArray(args[0]) ? args[0] : []
@@ -151,6 +182,16 @@ export class Fonts extends Service {
       this.ctx.logger.info('registed %d fonts', fonts.length)
     })
   }
+
+  /**
+   * Registers Google Fonts by parsing the provided URL and merging the parsed fonts
+   * into the existing font collection.
+   *
+   * @param url - The URL of the Google Fonts stylesheet. It must start with
+   *              'https://fonts.googleapis.com/css' to be considered valid.
+   *              If the URL is invalid, a warning will be logged.
+   *
+   */
   googleFontRegister(url: string) {
     return this.lock.withWriteLock(() => {
       let fonts: Fonts.Font[]
@@ -176,6 +217,15 @@ export class Fonts extends Service {
       // No action needed - just acquiring the lock is sufficient
     })
   }
+
+  /**
+   * Deletes font entries from the database and removes their corresponding files from the filesystem.
+   *
+   * @param family - The font family name to identify the fonts to delete.
+   * @param fonts - An array of font objects containing details about the fonts to be deleted.
+   *
+   * @throws Will not throw an error if a file cannot be accessed or deleted, but logs a warning instead.
+   */
   async delete(family: string, fonts: Fonts.Font[]) {
     const row = await this.ctx.model.get('fonts', { family })
     if (!row.length) return
@@ -200,6 +250,15 @@ export class Fonts extends Service {
     await rm(path)
   }
 
+  /**
+   * Downloads font files from the provided URLs, processes them, and updates the database with the font information.
+   *
+   * @param family - The font family name to associate with the downloaded fonts.
+   * @param urls - An array of URLs pointing to the font files to be downloaded.
+   * @param handle - A provider-specific download handler containing file metadata.
+   *
+   * @returns A promise that resolves when the font data has been processed and stored.
+   */
   async download(family: string, urls: string[], handle: Provider.Download) {
     const downloads =
       await Promise.allSettled(urls.map((url, index) => this.downloadOne(family, url, handle.files[index])))

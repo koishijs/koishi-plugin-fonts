@@ -48,6 +48,14 @@ export function googleFontsParser(u: string): Fonts.Font[] {
   return result
 }
 
+/**
+ * Computes the SHA-256 hash of a file at the specified path.
+ *
+ * @param path - The file path for which the SHA-256 hash is to be calculated.
+ * @returns A promise that resolves to the SHA-256 hash of the file as a hexadecimal string.
+ *
+ * @throws Will throw an error if the file cannot be read or if there is an issue during the hashing process.
+ */
 export async function getFileSha256(path: string): Promise<string> {
   const sha256 = createHash('sha256')
   const fileStream = createReadStream(path)
