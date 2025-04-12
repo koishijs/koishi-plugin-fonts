@@ -331,8 +331,15 @@ export class Fonts extends Service {
      * in case the filename didn't contains the extension,
      * resolve file type from header.
      */
-    if (!name.includes('.')) {
-      const contentType = headers['content-type']
+    let ext: string
+    if (name.includes('.')) {
+      ext = name.split('.').pop()
+    }
+    if (ext && this.formats.includes(ext)) {
+      format = ext
+    }
+    else {
+      const contentType = headers.get('content-type')
       if (contentType) {
         if (contentType.includes('font/woff')) {
           name += '.woff'
@@ -361,12 +368,6 @@ export class Fonts extends Service {
         else {
           this.ctx.logger.warn('unknown font type', contentType)
         }
-      }
-    }
-    else {
-      const ext = name.split('.').pop()
-      if (this.formats.includes(ext)) {
-        format = ext
       }
     }
 
