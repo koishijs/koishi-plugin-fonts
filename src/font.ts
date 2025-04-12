@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { createReadStream, createWriteStream } from 'fs'
+import { createWriteStream } from 'fs'
 import { access, constants, mkdir, readdir, rename, rm, stat } from 'fs/promises'
 import { basename, resolve } from 'path'
 import { Readable } from 'stream'
@@ -10,7 +10,7 @@ import { $, Context, Service, z } from 'koishi'
 import sanitize from 'sanitize-filename'
 
 import { Provider } from './provider'
-import { googleFontsParser, mergeFonts } from './utils'
+import { getFileSha256, googleFontsParser, mergeFonts } from './utils'
 
 export class Fonts extends Service {
   private root: string
@@ -122,22 +122,13 @@ export class Fonts extends Service {
           .filter((path) =>
             this.formats.some((ext) => path.endsWith(`.${ext}`)))
           .map(async (path) => {
-            const sha256 = createHash('sha256')
+            const sha256 = await getFileSha256(path)
             const fileStat = await stat(path)
-            const fileStream = createReadStream(path)
             const fileName = basename(path)
-            // TODO: Verify the validity of the extension name.
-            const format = fileName.split('.').pop() as Fonts.Font['format']
-
-            await new Promise<void>((resolve, reject) => {
-              fileStream
-                .on('data', (chunk) => sha256.update(chunk))
-                .on('end', resolve)
-                .on('error', reject)
-            })
+            const format = fileName.split('.').pop()
 
             return {
-              id: sha256.digest('hex'),
+              id: sha256,
               family,
               format,
               fileName,
@@ -179,6 +170,12 @@ export class Fonts extends Service {
         console.warn(`Failed to delete file: ${f.path}`, err.message)
       }
     }))
+  }
+
+  private async deleteExist(path: string) {
+    const sha256 = await getFileSha256(path)
+    await this.ctx.model.remove('fonts', { id: sha256 })
+    await rm(path)
   }
 
   async download(family: string, urls: string[], handle: Provider.Download) {
@@ -339,9 +336,6 @@ export class Fonts extends Service {
         handle.downloaded += chunk.length
       })
 
-      /**
-       * TODO: handle same file
-      */
       output.on('finish', async () => {
         if (handle.cancel) {
           await cleanup()
@@ -352,6 +346,10 @@ export class Fonts extends Service {
         const path = resolve(this.root, folderName, name)
         let retry = 3
         let success = false
+
+        if (await access(path, constants.F_OK).then(() => true).catch(() => false)) {
+          await this.deleteExist(path)
+        }
 
         try {
           while (retry--) {

@@ -1,3 +1,5 @@
+import { createHash } from 'crypto'
+import { createReadStream } from 'fs'
 import type { Fonts } from './font'
 
 /**
@@ -46,3 +48,15 @@ export function googleFontsParser(u: string): Fonts.Font[] {
   return result
 }
 
+export async function getFileSha256(path: string): Promise<string> {
+  const sha256 = createHash('sha256')
+  const fileStream = createReadStream(path)
+  await new Promise<void>((resolve, reject) => {
+    fileStream
+      .on('data', (chunk) => sha256.update(chunk))
+      .on('end', resolve)
+      .on('error', reject)
+  })
+
+  return sha256.digest('hex')
+}
