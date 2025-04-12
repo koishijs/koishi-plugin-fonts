@@ -8,13 +8,18 @@
     "lib",
     "dist"
   ],
-  "author": "Shigma <shigma10826@gmail.com>",
+  "author": {
+    "name": "SaarChaffee",
+    "email": "saarchaffee@qq.com",
+    "url": "https://github.com/SaarChaffee"
+  },
   "maintainers": [
     {
       "name": "Maiko Tan",
       "email": "maiko.tan.coding@gmail.com",
       "url": "https://github.com/MaikoTan"
-    }
+    },
+    "Shigma <shigma10826@gmail.com>"
   ],
   "scripts": {
     "build": "tsc -b && koishi-console build",
@@ -64,7 +69,6 @@
     "@koishijs/client": "^5.30.7",
     "@koishijs/plugin-console": "^5.30.7",
     "@types/node": "^20.17.30",
-    "@types/throttle-debounce": "^5.0.2",
     "@typescript-eslint/parser": "^8.29.1-alpha.2",
     "esbuild": "^0.25.2",
     "esbuild-register": "^3.6.0",
@@ -76,8 +80,6 @@
   },
   "dependencies": {
     "@koishijs/console": "^5.30.7",
-    "chokidar": "^3.6.0",
-    "sanitize-filename": "^1.6.3",
-    "throttle-debounce": "^5.0.2"
+    "sanitize-filename": "^1.6.3"
   }
 }
