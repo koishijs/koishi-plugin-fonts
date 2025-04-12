@@ -10,11 +10,11 @@ import { $, Context, Service, z } from 'koishi'
 import sanitize from 'sanitize-filename'
 
 import { Provider } from './provider'
-import { getFileSha256, googleFontsParser, mergeFonts } from './utils'
+import { getFileSha256, googleFontsParser, mergeFonts, ReadWriteLock } from './utils'
 
 export class Fonts extends Service {
   private root: string
-  // TODO: thread safety
+  private lock: ReadWriteLock
   private fonts: Fonts.Font[]
 
   private formats = ['woff', 'woff2', 'ttf', 'otf', 'sfnt', 'ttc']
@@ -44,12 +44,15 @@ export class Fonts extends Service {
         primary: 'id',
       })
     ctx.plugin(Provider, this)
+    this.lock = new ReadWriteLock(true)
   }
 
   async start() {
     this.root = resolve(this.ctx.baseDir, this.config.root)
     await mkdir(this.root, { recursive: true })
-    this.fonts = []
+    await this.lock.withWriteLock(() => {
+      this.fonts = []
+    })
   }
 
   async list(): Promise<Fonts.Font[]> {
@@ -57,103 +60,122 @@ export class Fonts extends Service {
   }
 
   async get(families: string[]): Promise<Fonts.Font[]> {
-    const db = await this.ctx.model
-      .select('fonts')
-      .where((row) => $.in(row.family, families))
-      .execute()
-    const fonts = this.fonts.filter((font) => families.includes(font.family))
-    return mergeFonts(fonts, db)
-      .map((f) => {
-        const font = { ...f }
-        font.path = font.format === 'google' ? font.path : `${pathToFileURL(font.path)}`
-        font.descriptors = Object.entries(font.descriptors).reduce((acc, [key, value]) => {
-          if (value !== null) {
-            acc[key] = value
-          }
-          return acc
-        }, {} as FontFaceDescriptors)
-        return font
-      })
+    await this.waitForWritesToComplete()
+    return await this.lock.withReadLock(async () => {
+      const db = await this.ctx.model
+        .select('fonts')
+        .where((row) => $.in(row.family, families))
+        .execute()
+      const fonts = this.fonts.filter((font) => families.includes(font.family))
+
+      return mergeFonts(fonts, db)
+        .map((f) => {
+          const font = { ...f }
+          font.path = font.format === 'google' ? font.path : `${pathToFileURL(font.path)}`
+          font.descriptors = Object.entries(font.descriptors).reduce((acc, [key, value]) => {
+            if (value !== null) {
+              acc[key] = value
+            }
+            return acc
+          }, {} as FontFaceDescriptors)
+          return font
+        })
+    })
   }
-
   register: Fonts.Register = async (...args: Fonts.RegisterArgs) => {
-    const fonts = Array.isArray(args[0]) ? args[0] : []
+    return await this.lock.withWriteLock(async () => {
+      const fonts = Array.isArray(args[0]) ? args[0] : []
 
-    if (!Array.isArray(args[0])) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const [family, param, config] = args
-      const paths: string[] = Array.isArray(param) ? param : []
+      if (!Array.isArray(args[0])) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const [family, param, config] = args
+        const paths: string[] = Array.isArray(param) ? param : []
 
-      if (!Array.isArray(param)) {
-        const isDirectory = async (path: string): Promise<boolean> => {
-          try {
-            await access(path, constants.F_OK)
-            return (await stat(path)).isDirectory()
-          }
-          catch (err) {
-            this.ctx.logger.error(`Failed to access path: ${path}`, err.message)
-            return false
-          }
-        }
-        const readAllFiles = async (folderPath: string) => {
-          const readFolder = async (path: string) => {
-            const entries = await readdir(path, { withFileTypes: true })
-            for (const entry of entries) {
-              const fullPath = resolve(path, entry.name)
-              if (entry.isDirectory()) {
-                await readFolder(fullPath)
-              }
-              else {
-                paths.push(fullPath)
-              }
+        if (!Array.isArray(param)) {
+          const isDirectory = async (path: string): Promise<boolean> => {
+            try {
+              await access(path, constants.F_OK)
+              return (await stat(path)).isDirectory()
+            }
+            catch (err) {
+              this.ctx.logger.error(`Failed to access path: ${path}`, err.message)
+              return false
             }
           }
-          await readFolder(folderPath)
+          const readAllFiles = async (folderPath: string) => {
+            const readFolder = async (path: string) => {
+              const entries = await readdir(path, { withFileTypes: true })
+              for (const entry of entries) {
+                const fullPath = resolve(path, entry.name)
+                if (entry.isDirectory()) {
+                  await readFolder(fullPath)
+                }
+                else {
+                  paths.push(fullPath)
+                }
+              }
+            }
+            await readFolder(folderPath)
+          }
+          if (await isDirectory(param)) {
+            await readAllFiles(param)
+            this.ctx.logger.info('scanned %d files from folder: %s', paths.length, param)
+          }
         }
-        if (await isDirectory(param)) {
-          await readAllFiles(param)
-          this.ctx.logger.info('scanned %d files from folder: %s', paths.length, param)
-        }
+
+        // TODO: parse font descriptors by using fontkit
+        fonts.push(...(await Promise.all(
+          paths
+            .filter((path) =>
+              this.formats.some((ext) => path.endsWith(`.${ext}`)))
+            .map(async (path) => {
+              const sha256 = await getFileSha256(path)
+              const fileStat = await stat(path)
+              const fileName = basename(path)
+              const format = fileName.split('.').pop()
+
+              return {
+                id: sha256,
+                family,
+                format,
+                fileName,
+                size: fileStat.size,
+                path: path,
+                descriptors: {} as FontFaceDescriptors,
+              }
+            }),
+        )))
       }
 
-      // TODO: parse font descriptors by using fontkit
-      fonts.push(...(await Promise.all(
-        paths
-          .filter((path) =>
-            this.formats.some((ext) => path.endsWith(`.${ext}`)))
-          .map(async (path) => {
-            const sha256 = await getFileSha256(path)
-            const fileStat = await stat(path)
-            const fileName = basename(path)
-            const format = fileName.split('.').pop()
-
-            return {
-              id: sha256,
-              family,
-              format,
-              fileName,
-              size: fileStat.size,
-              path: path,
-              descriptors: {} as FontFaceDescriptors,
-            }
-          }),
-      )))
-    }
-
-    this.fonts = mergeFonts(this.fonts, fonts)
-    this.ctx.logger.info('registed %d fonts', fonts.length)
-  }
-
-  googleFontRegister(url: string) {
-    let fonts: Fonts.Font[]
-    if (url.startsWith('https://fonts.googleapis.com/css')) {
-      fonts = googleFontsParser(url)
       this.fonts = mergeFonts(this.fonts, fonts)
-    } else {
-      this.ctx.logger.warn('Invalid Google Fonts URL:', url)
-    }
+      this.ctx.logger.info('registed %d fonts', fonts.length)
+    })
+  }
+  googleFontRegister(url: string) {
+    return this.lock.withWriteLock(() => {
+      let fonts: Fonts.Font[]
+      if (url.startsWith('https://fonts.googleapis.com/css')) {
+        fonts = googleFontsParser(url)
+        this.fonts = mergeFonts(this.fonts, fonts)
+      } else {
+        this.ctx.logger.warn('Invalid Google Fonts URL:', url)
+      }
+    })
   }
 
+  /**
+   * Wait for all pending write operations to complete
+   * This provides a synchronization point to ensure all writes are finished
+   *
+   * @returns A promise that resolves when all pending writes are completed
+   */
+  async waitForWritesToComplete(): Promise<void> {
+    // Simply acquire and immediately release a write lock
+    // This ensures all previous write operations have been completed
+    return await this.lock.withWriteLock(() => {
+      // No action needed - just acquiring the lock is sufficient
+    })
+  }
   async delete(family: string, fonts: Fonts.Font[]) {
     const row = await this.ctx.model.get('fonts', { family })
     if (!row.length) return
