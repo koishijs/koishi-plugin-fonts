@@ -17,6 +17,8 @@ export class Fonts extends Service {
   // TODO: thread safety
   private fonts: Fonts.Font[]
 
+  private formats = ['.woff', '.woff2', '.ttf', '.otf', '.sfnt', '.ttc']
+
   constructor(ctx: Context, public config: Fonts.Config) {
     super(ctx, 'fonts')
     ctx.model.extend(
@@ -118,7 +120,7 @@ export class Fonts extends Service {
       fonts.push(...(await Promise.all(
         paths
           .filter((path) =>
-            ['.woff', '.woff2', '.ttf', '.otf', '.sfnt', '.ttc'].some((ext) => path.endsWith(ext)))
+            this.formats.some((ext) => path.endsWith(`.${ext}`)))
           .map(async (path) => {
             const sha256 = createHash('sha256')
             const fileStat = await stat(path)
@@ -282,9 +284,8 @@ export class Fonts extends Service {
     }
     else {
       const ext = name.split('.').pop()
-      // TODO: Verify the validity of the extension name.
-      if (ext) {
-        format = ext as Fonts.Font['format']
+      if (this.formats.includes(ext)) {
+        format = ext
       }
     }
 
