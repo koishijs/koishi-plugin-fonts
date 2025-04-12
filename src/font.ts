@@ -198,7 +198,8 @@ export class Fonts extends Service {
       if (url.startsWith('https://fonts.googleapis.com/css')) {
         fonts = googleFontsParser(url)
         this.fonts = mergeFonts(this.fonts, fonts)
-      } else {
+      }
+      else {
         this.ctx.logger.warn('Invalid Google Fonts URL:', url)
       }
     })
@@ -271,10 +272,12 @@ export class Fonts extends Service {
       const font = fonts[i]
       await this.ctx.model.upsert(
         'fonts',
-        Array.isArray(font) ? font : [{
-          ...font,
-          family,
-        }],
+        Array.isArray(font)
+          ? font
+          : [{
+              ...font,
+              family,
+            }],
       )
     }
   }

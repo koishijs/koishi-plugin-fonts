@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import { createReadStream } from 'fs'
+
 import type { Fonts } from './font'
 
 /**
@@ -10,10 +11,10 @@ import type { Fonts } from './font'
  */
 export function mergeFonts(existingFonts: Fonts.Font[], newFonts: Fonts.Font[]): Fonts.Font[] {
   const unique = newFonts.filter((font) =>
-    !existingFonts.some((f) => f.id === font.id)
+    !existingFonts.some((f) => f.id === font.id),
   )
   const update = existingFonts.map((exist) =>
-    newFonts.find((font) => font.id === exist.id) || exist
+    newFonts.find((font) => font.id === exist.id) || exist,
   )
   return [...update, ...unique]
 }
@@ -31,6 +32,7 @@ export function googleFontsParser(u: string): Fonts.Font[] {
   const display = queryParams.get('display') as FontDisplay
 
   families.forEach((family) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [name, variants] = family.split(':')
     const font: Fonts.Font = {
       id: family,
@@ -70,10 +72,10 @@ export async function getFileSha256(path: string): Promise<string> {
 }
 
 export class ReadWriteLock {
-  private waitingReaders: Array<() => void> = [];
-  private waitingWriters: Array<() => void> = [];
-  private activeReaders = 0;
-  private activeWriter = false;
+  private waitingReaders: (() => void)[] = []
+  private waitingWriters: (() => void)[] = []
+  private activeReaders = 0
+  private activeWriter = false
   private writerPreference: boolean
 
   constructor(writerPreference = false) {
@@ -87,7 +89,7 @@ export class ReadWriteLock {
   async acquireReadLock() {
     // If there is an active writer, or waiting writers and writer preference is enabled
     if (this.activeWriter || (this.writerPreference && this.waitingWriters.length > 0)) {
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         this.waitingReaders.push(resolve)
       })
     }
@@ -104,7 +106,7 @@ export class ReadWriteLock {
   async acquireWriteLock() {
     // If there are active readers or an active writer
     if (this.activeReaders > 0 || this.activeWriter) {
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         this.waitingWriters.push(resolve)
       })
     }
@@ -142,12 +144,14 @@ export class ReadWriteLock {
       // Prioritize waking up a waiting writer
       const writer = this.waitingWriters.shift()
       writer?.()
-    } else if (this.waitingReaders.length > 0) {
+    }
+    else if (this.waitingReaders.length > 0) {
       // Wake up all waiting readers
       const readers = [...this.waitingReaders]
       this.waitingReaders = []
-      readers.forEach(reader => reader())
-    } else if (this.waitingWriters.length > 0) {
+      readers.forEach((reader) => reader())
+    }
+    else if (this.waitingWriters.length > 0) {
       // Wake up a waiting writer
       const writer = this.waitingWriters.shift()
       writer?.()
@@ -163,7 +167,8 @@ export class ReadWriteLock {
     const release = await this.acquireReadLock()
     try {
       return await fn()
-    } finally {
+    }
+    finally {
       release()
     }
   }
@@ -177,7 +182,8 @@ export class ReadWriteLock {
     const release = await this.acquireWriteLock()
     try {
       return await fn()
-    } finally {
+    }
+    finally {
       release()
     }
   }
@@ -192,8 +198,7 @@ export class ReadWriteLock {
       activeWriter: this.activeWriter,
       waitingReaders: this.waitingReaders.length,
       waitingWriters: this.waitingWriters.length,
-      writerPreference: this.writerPreference
+      writerPreference: this.writerPreference,
     }
   }
-
 }
