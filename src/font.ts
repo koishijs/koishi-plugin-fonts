@@ -17,7 +17,7 @@ export class Fonts extends Service {
   // TODO: thread safety
   private fonts: Fonts.Font[]
 
-  private formats = ['.woff', '.woff2', '.ttf', '.otf', '.sfnt', '.ttc']
+  private formats = ['woff', 'woff2', 'ttf', 'otf', 'sfnt', 'ttc']
 
   constructor(ctx: Context, public config: Fonts.Config) {
     super(ctx, 'fonts')
