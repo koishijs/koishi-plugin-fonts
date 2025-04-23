@@ -39,7 +39,7 @@ export class Provider extends DataService<Provider.Payload> {
         })),
       }
       this.downloads[name] = handle
-      this.fonts.download(name, urls, handle)
+      this.fonts.download(handle)
       await this.refresh(true)
       const timer = setInterval(async () => {
         await this.refresh(true)

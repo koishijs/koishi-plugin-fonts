@@ -260,7 +260,7 @@ export class Fonts extends Service {
    *
    * @returns A promise that resolves when the font data has been processed and stored.
    */
-  async download(family: string, urls: string[], handle: Provider.Download) {
+  async download(handle: Provider.Download) {
     const downloads =
       await Promise.allSettled(urls.map((url, index) => this.downloadOne(family, url, handle.files[index])))
     const fonts =
@@ -276,7 +276,7 @@ export class Fonts extends Service {
           ? font
           : [{
               ...font,
-              family,
+              family: handle.name,
             }],
       )
     }
@@ -284,7 +284,6 @@ export class Fonts extends Service {
 
   /**
    * @param name the name of the font to be displayed
-   * @param url the url of the font to be downloaded
    * @param handle the download handle
    *
    * @returns the sha256 hash of the downloaded file
@@ -294,9 +293,9 @@ export class Fonts extends Service {
    */
   private async downloadOne(
     name: string,
-    url: string,
     handle: Provider.Download['files'][number],
   ): Promise<Fonts.Font[] | Fonts.Font | void> {
+    const url = handle.url
     if (!url.trim()) {
       handle.failure = true
       throw new Error(`Empty URL provided: ${name}`)
