@@ -1,7 +1,8 @@
 import { createHash } from 'crypto'
 import { createReadStream } from 'fs'
+import { stat } from 'fs/promises'
 
-import type { Fonts } from './font'
+import { Fonts } from './font'
 
 /**
  * Merge font lists, update existing fonts and return new fonts
@@ -20,34 +21,44 @@ export function mergeFonts(existingFonts: Fonts.Font[], newFonts: Fonts.Font[]):
 }
 
 /**
- * Parse the Google Fonts URL, separating each font
- * @param u Google Fonts 的 URL
- * @returns List of fonts
+ * Checks if a string is a URL by testing if it starts with a protocol scheme followed by "://".
+ * The function verifies that the string begins with a letter followed by letters, numbers,
+ * plus signs, periods, or hyphens, and then "://".
+ *
+ * @param str - The string to check if it's a URL
+ * @returns `true` if the string matches URL pattern, `false` otherwise
+ *
+ * @example
+ * isUrl("http://example.com"); // true
+ * isUrl("ftp://files.server.com"); // true
+ * isUrl("file:///file"); // true
+ * isUrl("example.com"); // false
+ * isUrl("//example.com"); // false
  */
-export function googleFontsParser(u: string): Fonts.Font[] {
-  const result: Fonts.Font[] = []
-  const url = new URL(u)
-  const queryParams = url.searchParams
-  const families = queryParams.getAll('family')
-  const display = queryParams.get('display') as FontDisplay
+export function isUrl(str: string) {
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(str)
+}
 
-  families.forEach((family) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [name, variants] = family.split(':')
-    const font: Fonts.Font = {
-      id: family,
-      family: decodeURIComponent(name),
-      format: 'google',
-      fileName: family,
-      size: 0, // 大小未知
-      path: `${url.origin}${url.pathname}?family=${family}${display ? `&display=${display}` : ''}`
-        .replace(' ', '+'),
-      descriptors: {} as FontFaceDescriptors,
+/**
+ * Retrieves information about a file at the specified path.
+ *
+ * @param path - The path to the file to get information for. Can be a local file path or URL.
+ * @returns An object containing the file's SHA256 hash as `id` and size in bytes.
+ *          Returns `{ id: '', size: 0 }` if the path is a URL or if the file cannot be read.
+ */
+export async function getFileInfo(path: string) {
+  if (!isUrl(path)) {
+    try {
+      const id = await getFileSha256(path)
+      const fileStat = await stat(path)
+      return { id, size: fileStat.size }
     }
-    result.push(font)
-  })
+    catch (e) {
+      this.ctx.logger.warn(`Failed to read file: ${path}`, e.message)
+    }
+  }
 
-  return result
+  return { id: '', size: 0 }
 }
 
 /**
@@ -201,4 +212,98 @@ export class ReadWriteLock {
       writerPreference: this.writerPreference,
     }
   }
+
+  /**
+   * Wait for all pending write operations to complete
+   * This provides a synchronization point to ensure all writes are finished
+   *
+   * @returns A promise that resolves when all pending writes are completed
+   */
+  async waitForWritesToComplete(): Promise<void> {
+    return await this.withWriteLock(() => {})
+  }
+}
+
+/**
+ * Type guard function that determines if an unknown object is a valid {@link Fonts.FontManifest}.
+ *
+ * A valid Font Manifest must:
+ * - Be a non-null object
+ * - Have a string `version` property
+ * - Have a `fonts` object property containing font families
+ * - Each font family must be an array of valid FontManifestSource
+ * - If present, the optional `options` property must be an object with some options
+ *
+ * @param obj - The object to check
+ * @returns True if the object is a valid Font Manifest, false otherwise
+ */
+export function isFontManifest(obj: unknown): obj is Fonts.FontManifest {
+  if (!obj || typeof obj !== 'object') return false
+
+  if (!('version' in obj && typeof obj.version === 'string')) return false
+  if (!('fonts' in obj && typeof obj.fonts === 'object' && obj.fonts !== null)) return false
+
+  const fonts = obj.fonts as Record<string, unknown>
+  for (const family in fonts) {
+    const sources = fonts[family]
+    if (!Array.isArray(sources)) return false
+
+    for (const source of sources) {
+      if (!isFontManifestSource(source)) return false
+    }
+  }
+
+  if ('options' in obj) {
+    const options = obj.options
+    if (!isFontManifestOptions(options)) return false
+  }
+
+  return true
+}
+
+/**
+ * Type guard that checks if the given object is a valid {@link Fonts.FontManifestSource}.
+ *
+ * A valid FontManifestSource must:
+ * - Be an object
+ * - Have a 'type' property which is one of: 'local', 'remote', or 'google'
+ * - For 'google' type: must have a 'urls' property that is an array
+ * - For 'local' or 'remote' types: must have a 'slice' property that is an array
+ *
+ * @param obj - The object to check
+ * @returns True if the object is a valid FontManifestSource, false otherwise
+ */
+function isFontManifestSource(obj: unknown): obj is Fonts.FontManifestSource {
+  if (!obj || typeof obj !== 'object') return false
+
+  if (!('type' in obj && typeof obj.type === 'string')) return false
+  const { type } = obj as { type: string }
+  if (!['local', 'remote', 'google'].includes(type)) return false
+
+  if ('options' in obj) {
+    const options = obj.options
+    if (!isFontManifestOptions(options)) return false
+  }
+
+  if (type === 'google') {
+    return 'urls' in obj && Array.isArray((obj as any).urls)
+  }
+  else {
+    return 'slice' in obj && Array.isArray((obj as any).slice)
+  }
+}
+
+/**
+ * Type guard that checks if the provided object conforms to the {@link Fonts.FontManifestOptions} interface.
+ *
+ * @param obj - The object to check
+ * @returns A type predicate indicating whether the object is a FontManifestOptions
+ */
+function isFontManifestOptions(obj: unknown): obj is Fonts.FontManifestOptions {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return false
+
+  const options = obj as Record<string, unknown>
+  if ('getSha256' in options && typeof options.getSha256 !== 'boolean') return false
+
+  return true
 }

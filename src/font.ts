@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 import { createWriteStream } from 'fs'
-import { access, constants, mkdir, readdir, rename, rm, stat } from 'fs/promises'
-import { basename, resolve } from 'path'
+import { access, constants, mkdir, readdir, readFile, rename, rm, stat } from 'fs/promises'
+import { basename, dirname, isAbsolute, resolve } from 'path'
 import { Readable } from 'stream'
 import { ReadableStream } from 'stream/web'
 import { pathToFileURL } from 'url'
@@ -10,14 +10,19 @@ import { $, Context, Service, z } from 'koishi'
 import sanitize from 'sanitize-filename'
 
 import { Provider } from './provider'
-import { getFileSha256, googleFontsParser, mergeFonts, ReadWriteLock } from './utils'
+import {
+  getFileInfo,
+  getFileSha256,
+  isFontManifest,
+  isUrl,
+  mergeFonts,
+  ReadWriteLock,
+} from './utils'
 
 export class Fonts extends Service {
   private root: string
   private lock: ReadWriteLock
   private fonts: Fonts.Font[]
-
-  private formats = ['woff', 'woff2', 'ttf', 'otf', 'sfnt', 'ttc']
 
   constructor(ctx: Context, public config: Fonts.Config) {
     super(ctx, 'fonts')
@@ -53,6 +58,11 @@ export class Fonts extends Service {
     await this.lock.withWriteLock(() => {
       this.fonts = []
     })
+    const manifest = await this.ctx.model.get('fonts', { format: 'manifest' })
+    if (manifest.length) {
+      this.ctx.logger.info('found %d manifest fonts in database', manifest.length)
+      await this.manifestRegister(manifest.map((m) => m.path))
+    }
   }
 
   /**
@@ -77,7 +87,7 @@ export class Fonts extends Service {
    *          containing the merged font data.
    */
   async get(families: string[]): Promise<Fonts.Font[]> {
-    await this.waitForWritesToComplete()
+    await this.lock.waitForWritesToComplete()
     return await this.lock.withReadLock(async () => {
       const db = await this.ctx.model
         .select('fonts')
@@ -88,7 +98,9 @@ export class Fonts extends Service {
       return mergeFonts(fonts, db)
         .map((f) => {
           const font = { ...f }
-          font.path = font.format === 'google' ? font.path : `${pathToFileURL(font.path)}`
+          font.path = font.format === 'google' || isUrl(font.path)
+            ? font.path
+            : `${pathToFileURL(font.path)}`
           font.descriptors = Object.entries(font.descriptors).reduce((acc, [key, value]) => {
             if (value !== null) {
               acc[key] = value
@@ -110,8 +122,6 @@ export class Fonts extends Service {
    *               of font descriptors or a tuple containing the font family name,
    *               a path (or array of paths) to font files or directories, and
    *               an optional configuration object.
-   *
-   * @returns A promise that resolves once the fonts have been registered.
    */
   register: Fonts.Register = async (...args: Fonts.RegisterArgs) => {
     return await this.lock.withWriteLock(async () => {
@@ -158,19 +168,18 @@ export class Fonts extends Service {
         fonts.push(...(await Promise.all(
           paths
             .filter((path) =>
-              this.formats.some((ext) => path.endsWith(`.${ext}`)))
+              Object.values(Fonts.FontFormats).some((ext) => path.endsWith(`.${ext}`)))
             .map(async (path) => {
-              const sha256 = await getFileSha256(path)
-              const fileStat = await stat(path)
+              const { id, size } = await getFileInfo(path)
               const fileName = basename(path)
-              const format = fileName.split('.').pop()
+              const format = fileName.split('.').pop() as Fonts.FontFormat
 
               return {
-                id: sha256,
+                id: id || fileName,
                 family,
                 format,
                 fileName,
-                size: fileStat.size,
+                size,
                 path: path,
                 descriptors: {} as FontFaceDescriptors,
               }
@@ -184,39 +193,205 @@ export class Fonts extends Service {
   }
 
   /**
-   * Registers Google Fonts by parsing the provided URL and merging the parsed fonts
-   * into the existing font collection.
+   * Registers Google Fonts by processing URLs from the Google Fonts API.
    *
-   * @param url - The URL of the Google Fonts stylesheet. It must start with
-   *              'https://fonts.googleapis.com/css' to be considered valid.
-   *              If the URL is invalid, a warning will be logged.
+   * This method parses font information from provided Google Fonts URLs and
+   * registers them into the font system. It uses a write lock to ensure thread safety
+   * during the registration process.
+   *
+   * @param param - A single Google Fonts URL string or an array of URL strings
    *
    */
-  googleFontRegister(url: string) {
+  googleFontRegister: Fonts.GoogleFontRegister = (param: string | string[]) => {
     return this.lock.withWriteLock(() => {
       let fonts: Fonts.Font[]
-      if (url.startsWith('https://fonts.googleapis.com/css')) {
-        fonts = googleFontsParser(url)
-        this.fonts = mergeFonts(this.fonts, fonts)
-      }
-      else {
-        this.ctx.logger.warn('Invalid Google Fonts URL:', url)
-      }
+      (Array.isArray(param) ? param : [param]).forEach((url) => {
+        if (url.startsWith('https://fonts.googleapis.com/css')) {
+          fonts = this.googleFontsParser(url)
+        }
+        else {
+          this.ctx.logger.warn('Invalid Google Fonts URL:', url)
+        }
+      })
+      this.fonts = mergeFonts(this.fonts, fonts)
+      this.ctx.logger.info('registed %d google fonts', fonts.length)
     })
   }
 
   /**
-   * Wait for all pending write operations to complete
-   * This provides a synchronization point to ensure all writes are finished
-   *
-   * @returns A promise that resolves when all pending writes are completed
+   * Parse the Google Fonts URL, separating each font
+   * @param u Google Fonts 的 URL
+   * @returns List of fonts
    */
-  async waitForWritesToComplete(): Promise<void> {
-    // Simply acquire and immediately release a write lock
-    // This ensures all previous write operations have been completed
-    return await this.lock.withWriteLock(() => {
-      // No action needed - just acquiring the lock is sufficient
+  googleFontsParser(u: string): Fonts.Font[] {
+    const result: Fonts.Font[] = []
+    const url = new URL(u)
+    const queryParams = url.searchParams
+    const families = queryParams.getAll('family')
+    const display = queryParams.get('display') as FontDisplay
+
+    families.forEach((family) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const [name, variants] = family.split(':')
+      const font: Fonts.Font = {
+        id: family,
+        family: decodeURIComponent(name),
+        format: Fonts.FontFormats.GOOGLE_FONT,
+        fileName: family,
+        size: 0, // 大小未知
+        path: `${url.origin}${url.pathname}?family=${family}${display ? `&display=${display}` : ''}`
+          .replace(' ', '+'),
+        descriptors: {} as FontFaceDescriptors,
+      }
+      result.push(font)
     })
+
+    return result
+  }
+
+  manifestRegister: Fonts.ManifestRegister = async (param: string | string[]) => {
+    const paths = Array.isArray(param) ? param : [param]
+    for (const path of paths) {
+      await this.manifestParser(path)
+    }
+  }
+
+  private async manifestParser(path: string, downloadFont?: boolean) {
+    let jsonContent: string
+    let base: string
+    let isRemote = false
+
+    if (isUrl(path)) {
+      try {
+        this.ctx.logger.info('Fetching remote manifest:', path)
+        jsonContent = await this.ctx.http.get<string>(path, { responseType: 'text' })
+        const url = new URL(path)
+        base = url.href.substring(0, url.href.lastIndexOf('/') + 1)
+        isRemote = true
+      }
+      catch (err) {
+        this.ctx.logger.error(`Failed to fetch remote manifest: ${path}`, err)
+        return
+      }
+    }
+    else {
+      try {
+        jsonContent = await readFile(path, 'utf8')
+        base = dirname(path)
+      }
+      catch (err) {
+        this.ctx.logger.error(`Failed to read local manifest: ${path}`, err)
+        return
+      }
+    }
+
+    let json
+    try {
+      json = JSON.parse(jsonContent)
+    }
+    catch (err) {
+      this.ctx.logger.error(`Failed to parse JSON from ${path}:`, err)
+      return
+    }
+
+    if (!isFontManifest(json)) {
+      this.ctx.logger.warn('Invalid manifest format:', path)
+      return
+    }
+
+    this.ctx.logger.info(`Parsing ${isRemote ? 'remote' : 'local'} manifest from: ${path}`)
+    const manifest = json as Fonts.FontManifest
+    const options = manifest.options || {}
+    const families = Object.keys(manifest.fonts)
+
+    for (const family of families) {
+      const sources = manifest.fonts[family]
+
+      for (const source of sources) {
+        const sourceOptions = { ...options, ...source?.options }
+
+        switch (source.type) {
+          case Fonts.FontSourceTypes.LOCAL:
+          case Fonts.FontSourceTypes.REMOTE:
+            source.slice = await Promise.all(source.slice.map(async (font) => {
+              if (!isAbsolute(font.path) && !isUrl(font.path)) {
+                if (isRemote) {
+                  font.path = new URL(font.path, base).href
+                }
+                else {
+                  font.path = resolve(base, font.path)
+                }
+              }
+
+              if (
+                (sourceOptions?.getSha256 || downloadFont) &&
+                source.type === Fonts.FontSourceTypes.LOCAL &&
+                !isUrl(font.path)
+              ) {
+                const { id, size } = await getFileInfo(font.path)
+                font.id = id
+                font.size = size
+              }
+              font.family = family
+              return font
+            }))
+
+            if (downloadFont) {
+              switch (source.type) {
+                case Fonts.FontSourceTypes.REMOTE: {
+                  const handle = {
+                    name: family,
+                    files: source.slice.map((font) => ({
+                      url: font.path,
+                      downloaded: 0,
+                      contentLength: 0,
+                      finished: false,
+                      cancel: false,
+                      cancelled: false,
+                      failure: false,
+                    })),
+                  }
+                  await this.download(handle)
+                  break
+                }
+                case Fonts.FontSourceTypes.LOCAL: {
+                  await this.ctx.model.upsert(
+                    'fonts',
+                    source.slice,
+                  )
+                }
+              }
+            }
+            else {
+              await this.register(source.slice)
+              this.ctx.logger.debug(`Processed ${source.type} fonts for family: ${family}`)
+            }
+            break
+
+          case Fonts.FontSourceTypes.GOOGLE:
+            if (downloadFont) {
+              const handle = {
+                name: family,
+                files: source.urls.map((url) => ({
+                  url,
+                  downloaded: 0,
+                  contentLength: 0,
+                  finished: false,
+                  cancel: false,
+                  cancelled: false,
+                  failure: false,
+                })),
+              }
+              await this.download(handle)
+            }
+            else {
+              await this.googleFontRegister(source.urls)
+              this.ctx.logger.debug(`Processed Google fonts for family: ${family}`)
+            }
+            break
+        }
+      }
+    }
   }
 
   /**
@@ -235,12 +410,14 @@ export class Fonts extends Service {
     const deleteFont = fonts.filter((font) => rowFontIds.has(font.id))
     await Promise.all(deleteFont.map((f) => this.ctx.model.remove('fonts', f)))
     await Promise.all(deleteFont.map(async (f) => {
-      try {
-        await access(f.path, constants.F_OK)
-        await rm(f.path)
-      }
-      catch (err) {
-        console.warn(`Failed to delete file: ${f.path}`, err.message)
+      if (Object.values(Fonts.FontFormats).includes(f.format) && !isUrl(f.path)) {
+        try {
+          await access(f.path, constants.F_OK)
+          await rm(f.path)
+        }
+        catch (err) {
+          console.warn(`Failed to delete file: ${f.path}`, err.message)
+        }
       }
     }))
   }
@@ -255,16 +432,28 @@ export class Fonts extends Service {
    * Downloads font files from the provided URLs, processes them, and updates the database with the font information.
    *
    * @param family - The font family name to associate with the downloaded fonts.
-   * @param urls - An array of URLs pointing to the font files to be downloaded.
    * @param handle - A provider-specific download handler containing file metadata.
    *
    * @returns A promise that resolves when the font data has been processed and stored.
    */
   async download(handle: Provider.Download) {
     const downloads =
-      await Promise.allSettled(urls.map((url, index) => this.downloadOne(family, url, handle.files[index])))
-    const fonts =
-      downloads.filter((result) => result.status === 'fulfilled').map((result) => result.value as Fonts.Font)
+      await Promise.allSettled(handle.files.map((file, index) => {
+        const url = file.url
+        if (url.startsWith('https://fonts.googleapis.com/css')) {
+          handle.files[index].finished = true
+          return this.googleFontsParser(url)
+        }
+        if (url.endsWith('/fonts.json')) {
+          handle.files[index].finished = true
+          return this.manifestParser(url, true)
+        }
+        return this.downloadOne(handle.name, handle.files[index])
+      }))
+    const fonts = downloads
+      .filter((result) => result.status === 'fulfilled')
+      .filter(Boolean)
+      .map((result) => result.value as Fonts.Font)
     if (fonts.length === 0) return
 
     // TODO: parse font descriptors by using fontkit
@@ -300,11 +489,6 @@ export class Fonts extends Service {
       handle.failure = true
       throw new Error(`Empty URL provided: ${name}`)
     }
-    this.ctx.logger.info('download', name, url)
-    // 检查 URL 是否为 Google Fonts 的 URL
-    if (url.startsWith('https://fonts.googleapis.com/css')) {
-      return googleFontsParser(url)
-    }
 
     const family = name
     const controller = new AbortController()
@@ -334,42 +518,58 @@ export class Fonts extends Service {
     * in case the filename didn't contains the extension,
     * resolve file type from header.
     */
-    let ext: string
+    let ext
     if (name.includes('.')) {
       ext = name.split('.').pop()
     }
-    if (ext && this.formats.includes(ext)) {
+    if (ext && Object.values(Fonts.FontFormats).includes(ext)) {
       format = ext
     }
     else {
       const contentType = headers.get('content-type')
-      if (contentType) {
-        if (contentType.includes('font/woff')) {
-          name += '.woff'
-          format = 'woff'
+      switch (contentType) {
+        case 'font/woff': {
+          name += `.${Fonts.FontFormats.WEB_OPEN_FONT_FORMAT}`
+          format = Fonts.FontFormats.WEB_OPEN_FONT_FORMAT
+          break
         }
-        else if (contentType.includes('font/woff2')) {
-          name += '.woff2'
-          format = 'woff2'
+        case 'font/woff2': {
+          name += `.${Fonts.FontFormats.WEB_OPEN_FONT_FORMAT_2}`
+          format = Fonts.FontFormats.WEB_OPEN_FONT_FORMAT_2
+          break
         }
-        else if (contentType.includes('font/ttf')) {
-          name += '.ttf'
-          format = 'ttf'
+        case 'font/ttf': {
+          name += `.${Fonts.FontFormats.TRUE_TYPE_FONT}`
+          format = Fonts.FontFormats.TRUE_TYPE_FONT
+          break
         }
-        else if (contentType.includes('font/otf')) {
-          name += '.otf'
-          format = 'otf'
+        case 'font/otf': {
+          name += `.${Fonts.FontFormats.OPEN_TYPE_FONT}`
+          format = Fonts.FontFormats.OPEN_TYPE_FONT
+          break
         }
-        else if (contentType.includes('font/sfnt')) {
-          name += '.sfnt'
-          format = 'sfnt'
+        case 'font/sfnt': {
+          name += `.${Fonts.FontFormats.SPLINE_FONT}`
+          format = Fonts.FontFormats.SPLINE_FONT
+          break
         }
-        else if (contentType.includes('font/collection')) {
-          name += '.ttc'
-          format = 'ttc'
+        case 'font/collection': {
+          name += `.${Fonts.FontFormats.TRUE_TYPE_COLLECTION}`
+          format = Fonts.FontFormats.TRUE_TYPE_COLLECTION
+          break
         }
-        else {
+        default: {
           this.ctx.logger.warn('unknown font type', contentType)
+          try {
+            if (await access(tempFilePath, constants.F_OK).then(() => true).catch(() => false)) {
+              await rm(tempFilePath)
+            }
+          }
+          catch (err) {
+            this.ctx.logger.error(`Failed to remove temporary file: ${err.message}`)
+          }
+          handle.failure = true
+          return Promise.reject(new Error(`Unknown font type of file: ${name}`))
         }
       }
     }
@@ -489,14 +689,67 @@ export namespace Fonts {
   export interface Font {
     id: string
     family: string
-    format: string
+    format: FontFormat
     fileName: string
     size: number
     path: string
     descriptors?: FontFaceDescriptors
   }
 
-  export type RegisterArgs = [string, string | string[], Fonts.RegisterConfig?] | [Fonts.Font[]]
+  export const FontFormats = {
+    WEB_OPEN_FONT_FORMAT: 'woff',
+    WEB_OPEN_FONT_FORMAT_2: 'woff2',
+    TRUE_TYPE_FONT: 'ttf',
+    OPEN_TYPE_FONT: 'otf',
+    SPLINE_FONT: 'sfnt',
+    TRUE_TYPE_COLLECTION: 'ttc',
+    GOOGLE_FONT: 'google',
+    MANIFEST: 'manifest',
+  } as const
+
+  export type FontFormat = typeof FontFormats[keyof typeof FontFormats]
+
+  export interface FontManifest {
+    version: string
+    fonts: {
+      [fontFamily: string]: FontManifestSource[]
+    }
+    options?: FontManifestOptions
+  }
+
+  export interface BaseFontManifestSource {
+    type: FontSourceType
+    options?: FontManifestOptions
+  }
+
+  export const FontSourceTypes = {
+    LOCAL: 'local',
+    REMOTE: 'remote',
+    GOOGLE: 'google',
+  } as const
+
+  export type FontSourceType = typeof FontSourceTypes[keyof typeof FontSourceTypes]
+
+  export interface GoogleFontManifestSource extends BaseFontManifestSource {
+    type: 'google'
+    urls: string[]
+  }
+
+  export interface LocalOrRemoteFontManifestSource extends BaseFontManifestSource {
+    type: 'local' | 'remote'
+    slice: Font[]
+  }
+
+  export type FontManifestSource = GoogleFontManifestSource | LocalOrRemoteFontManifestSource
+
+  export interface FontManifestOptions {
+    getSha256?: boolean
+  }
+
+  export type RegisterArgs =
+    | [fonts: Font[]]
+    | [family: string, folderPath: string, config?: RegisterConfig]
+    | [family: string, paths: string[], config?: RegisterConfig]
 
   export interface RegisterConfig {
     parse?: boolean
@@ -508,6 +761,16 @@ export namespace Fonts {
     (family: string, folderPath: string, config?: RegisterConfig): Promise<void>
     (family: string, paths: string[], config?: RegisterConfig): Promise<void>
     (fonts: Font[]): Promise<void>
+  }
+
+  export interface GoogleFontRegister {
+    (url: string): Promise<void>
+    (urls: string[]): Promise<void>
+  }
+
+  export interface ManifestRegister {
+    (path: string): Promise<void>
+    (paths: string[]): Promise<void>
   }
 
   export const Config: z<Config> = z.object({
