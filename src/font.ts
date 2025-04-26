@@ -204,10 +204,10 @@ export class Fonts extends Service {
    */
   googleFontRegister: Fonts.GoogleFontRegister = (param: string | string[]) => {
     return this.lock.withWriteLock(() => {
-      let fonts: Fonts.Font[]
+      let fonts= [] as Fonts.Font[]
       (Array.isArray(param) ? param : [param]).forEach((url) => {
         if (url.startsWith('https://fonts.googleapis.com/css')) {
-          fonts = this.googleFontsParser(url)
+          fonts = mergeFonts(fonts, this.googleFontsParser(url))
         }
         else {
           this.ctx.logger.warn('Invalid Google Fonts URL:', url)
@@ -447,7 +447,10 @@ export class Fonts extends Service {
         }
         if (url.endsWith('/fonts.json')) {
           handle.files[index].finished = true
-          return this.manifestParser(url, true)
+          this.manifestParser(url, true).catch(err =>
+            this.ctx.logger.error('Font manifest processing failed:', err)
+          )
+          return null
         }
         return this.downloadOne(handle.name, handle.files[index])
       }))
@@ -511,7 +514,8 @@ export class Fonts extends Service {
     else {
       name = basename(url)
     }
-    const tempFilePath = resolve(this.root, folderName, name + `.${Date.now()}.tmp`)
+    const tempFilePath = resolve(this.root, folderName,
+      `${name}.${Date.now()}-${Math.random().toString(36).substring(2, 10)}.tmp`)
     const output = createWriteStream(tempFilePath)
     let format: Fonts.Font['format']
     /*
@@ -528,7 +532,7 @@ export class Fonts extends Service {
     }
     else {
       const contentType = headers.get('content-type')
-      switch (contentType) {
+      switch (contentType || 'unknown') {
         case 'font/woff': {
           name += `.${Fonts.FontFormats.WEB_OPEN_FONT_FORMAT}`
           format = Fonts.FontFormats.WEB_OPEN_FONT_FORMAT
@@ -580,7 +584,10 @@ export class Fonts extends Service {
     readable.pipe(output)
 
     return await new Promise<Fonts.Font | void>((_resolve, _reject) => {
-      const cleanup = async () => {
+      let cleanupExecuted = false
+      const cleanup = async (reason: string) => {
+        if (cleanupExecuted) return
+        cleanupExecuted = true
         readable.unpipe(output)
         readable.unpipe(hash)
 
@@ -589,10 +596,12 @@ export class Fonts extends Service {
         readable.removeAllListeners()
 
         if (!output.destroyed) {
-          // still emit data event after destroy and clear buffer
-          output.end(async () => {
-            output.destroy()
-            await rm(tempFilePath)
+          await new Promise<void>(resolve => {
+            output.end(async () => {
+              output.destroy()
+              await rm(tempFilePath)
+              resolve()
+            })
           })
         }
         if (!hash.destroyed) {
@@ -610,24 +619,24 @@ export class Fonts extends Service {
 
         controller.abort()
         handle.cancelled = true
-        _reject(handle.failure ? new Error('download failure') : new Error('download cancelled'))
+        _reject(new Error(`${reason}: ${url}`))
       }
 
       readable.on('error', async (err) => {
         handle.failure = true
-        await cleanup()
+        await cleanup('download failure')
       })
 
       readable.on('data', async (chunk) => {
         if (handle.cancel) {
-          await cleanup()
+          await cleanup('download cancelled')
         }
         handle.downloaded += chunk.length
       })
 
       output.on('finish', async () => {
         if (handle.cancel) {
-          await cleanup()
+          await cleanup('download cancelled')
           return
         }
 
@@ -666,7 +675,7 @@ export class Fonts extends Service {
               this.ctx.logger.error(`Failed to remove temporary file: ${err.message}`)
             })
             handle.failure = true
-            await cleanup()
+            await cleanup('download failure')
           }
           else {
             this.ctx.logger.info('Download finished successfully', name, sha256, path)
