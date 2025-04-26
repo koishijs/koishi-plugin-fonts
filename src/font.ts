@@ -249,6 +249,12 @@ export class Fonts extends Service {
     return result
   }
 
+  /**
+   * Registers one or more font manifests by parsing their file paths.
+   * 
+   * @param param - A single file path or an array of file paths to font manifest files
+   * @returns A Promise that resolves when all manifests have been registered
+   */
   manifestRegister: Fonts.ManifestRegister = async (param: string | string[]) => {
     const paths = Array.isArray(param) ? param : [param]
     for (const path of paths) {
