@@ -116,7 +116,8 @@ export namespace Provider {
       finished: boolean
       cancel: boolean
       cancelled: boolean
-      failure: boolean
+      failure: boolean,
+      descriptors?: FontFaceDescriptors
     }[]
   }
 

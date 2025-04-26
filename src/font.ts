@@ -349,6 +349,7 @@ export class Fonts extends Service {
                       cancel: false,
                       cancelled: false,
                       failure: false,
+                      descriptors: font?.descriptors || {} as FontFaceDescriptors
                     })),
                   }
                   await this.download(handle)
@@ -677,6 +678,7 @@ export class Fonts extends Service {
               fileName: name,
               path,
               size: handle.downloaded,
+              descriptors: handle?.descriptors || {} as FontFaceDescriptors
             })
           }
         }
