@@ -14,6 +14,7 @@ import {
   getFileInfo,
   getFileSha256,
   isFontManifest,
+  isNonEmptyString,
   isUrl,
   mergeFonts,
   ReadWriteLock,
@@ -61,7 +62,7 @@ export class Fonts extends Service {
     const manifest = await this.ctx.model.get('fonts', { format: 'manifest' })
     if (manifest.length) {
       this.ctx.logger.info('found %d manifest fonts in database', manifest.length)
-      await this.manifestRegister(manifest.map((m) => m.path))
+      await this.manifestRegister(manifest.map((m) => m.path), 'fonts')
     }
   }
 
@@ -113,24 +114,51 @@ export class Fonts extends Service {
   }
 
   /**
-   * Registers fonts into the system. This function supports registering fonts
-   * from an array of font descriptors or by scanning a directory for font files.
-   * It ensures thread safety by using a write lock during the registration process.
+   * Registers fonts in the font management system.
    *
-   * @param args: {@link Fonts.Register}
-   *             - The arguments for font registration. It can either be an array
-   *               of font descriptors or a tuple containing the font family name,
-   *               a path (or array of paths) to font files or directories, and
-   *               an optional configuration object.
+   * @function register
+   * @async
+   * @description This method supports two registration formats:
+   * 1. Array of font objects with a source name
+   * 2. Individual font registration with family name, path(s), and source name
+   *
+   * When a directory path is provided, it recursively scans for supported font files.
+   *
+   * @param {...Fonts.RegisterArgs} args - Registration arguments in one of these formats:
+   *   - [fontArray, sourceName]: Array of font objects and a string source identifier
+   *   - [family, param, sourceName, config]: Family name, path(s) to font files, source identifier, and optional config
+   *
+   * @remarks
+   * - The operation is protected by a write lock to ensure thread safety
+   * - Only files with supported font extensions will be processed
+   * - Invalid source names will result in warning logs and registration failure
+   * - File access errors will be logged but won't stop the registration process
    */
   register: Fonts.Register = async (...args: Fonts.RegisterArgs) => {
     return await this.lock.withWriteLock(async () => {
-      const fonts = Array.isArray(args[0]) ? args[0] : []
+      let fonts = []
+
+      if (args.length === 2 && Array.isArray(args[0])) {
+        if (!isNonEmptyString(args[1])) {
+          this.ctx.logger.warn('Invalid source name:', args[1])
+          return
+        }
+        const sourceName = args[1]?.trim()
+        fonts = args[0].map((font) => ({
+          ...font,
+          [Symbol.for('source')]: sourceName,
+        }))
+      }
 
       if (!Array.isArray(args[0])) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const [family, param, config] = args
+        const [family, param, sourceName, config] = args
         const paths: string[] = Array.isArray(param) ? param : []
+        if (!isNonEmptyString(sourceName)) {
+          this.ctx.logger.warn('Invalid source name:', sourceName)
+          return
+        }
+        const source = sourceName?.trim()
 
         if (!Array.isArray(param)) {
           const isDirectory = async (path: string): Promise<boolean> => {
@@ -182,6 +210,7 @@ export class Fonts extends Service {
                 size,
                 path: path,
                 descriptors: {} as FontFaceDescriptors,
+                [Symbol.for('source')]: source,
               }
             }),
         )))
@@ -200,14 +229,20 @@ export class Fonts extends Service {
    * during the registration process.
    *
    * @param param - A single Google Fonts URL string or an array of URL strings
+   * @param sourceName - The name of the source to associate with the registered fonts
    *
    */
-  googleFontRegister: Fonts.GoogleFontRegister = (param: string | string[]) => {
+  googleFontRegister: Fonts.GoogleFontRegister = (param: string | string[], sourceName: string) => {
     return this.lock.withWriteLock(() => {
-      let fonts= [] as Fonts.Font[]
+      if (!isNonEmptyString(sourceName)) {
+        this.ctx.logger.warn('Invalid source name:', sourceName)
+        return
+      }
+      const source = sourceName?.trim()
+      let fonts = [] as Fonts.Font[]
       (Array.isArray(param) ? param : [param]).forEach((url) => {
         if (url.startsWith('https://fonts.googleapis.com/css')) {
-          fonts = mergeFonts(fonts, this.googleFontsParser(url))
+          fonts = mergeFonts(fonts, this.googleFontsParser(url, source))
         }
         else {
           this.ctx.logger.warn('Invalid Google Fonts URL:', url)
@@ -218,12 +253,7 @@ export class Fonts extends Service {
     })
   }
 
-  /**
-   * Parse the Google Fonts URL, separating each font
-   * @param u Google Fonts 的 URL
-   * @returns List of fonts
-   */
-  googleFontsParser(u: string): Fonts.Font[] {
+  private googleFontsParser(u: string, source: string): Fonts.Font[] {
     const result: Fonts.Font[] = []
     const url = new URL(u)
     const queryParams = url.searchParams
@@ -242,6 +272,7 @@ export class Fonts extends Service {
         path: `${url.origin}${url.pathname}?family=${family}${display ? `&display=${display}` : ''}`
           .replace(' ', '+'),
         descriptors: {} as FontFaceDescriptors,
+        [Symbol.for('source')]: source,
       }
       result.push(font)
     })
@@ -251,18 +282,24 @@ export class Fonts extends Service {
 
   /**
    * Registers one or more font manifests by parsing their file paths.
-   * 
+   *
    * @param param - A single file path or an array of file paths to font manifest files
+   * @param sourceName - The name of the source to associate with the registered fonts
    * @returns A Promise that resolves when all manifests have been registered
    */
-  manifestRegister: Fonts.ManifestRegister = async (param: string | string[]) => {
+  manifestRegister: Fonts.ManifestRegister = async (param: string | string[], sourceName: string) => {
     const paths = Array.isArray(param) ? param : [param]
+    if (!isNonEmptyString(sourceName)) {
+      this.ctx.logger.warn('Invalid source name:', sourceName)
+      return
+    }
+    const source = sourceName?.trim()
     for (const path of paths) {
-      await this.manifestParser(path)
+      await this.manifestParser(path, source)
     }
   }
 
-  private async manifestParser(path: string, downloadFont?: boolean) {
+  private async manifestParser(path: string, sourceName: string, downloadFont?: boolean) {
     let jsonContent: string
     let base: string
     let isRemote = false
@@ -355,7 +392,7 @@ export class Fonts extends Service {
                       cancel: false,
                       cancelled: false,
                       failure: false,
-                      descriptors: font?.descriptors || {} as FontFaceDescriptors
+                      descriptors: font?.descriptors || {} as FontFaceDescriptors,
                     })),
                   }
                   await this.download(handle)
@@ -370,7 +407,7 @@ export class Fonts extends Service {
               }
             }
             else {
-              await this.register(source.slice)
+              await this.register(source.slice, sourceName)
               this.ctx.logger.debug(`Processed ${source.type} fonts for family: ${family}`)
             }
             break
@@ -392,7 +429,7 @@ export class Fonts extends Service {
               await this.download(handle)
             }
             else {
-              await this.googleFontRegister(source.urls)
+              await this.googleFontRegister(source.urls, sourceName)
               this.ctx.logger.debug(`Processed Google fonts for family: ${family}`)
             }
             break
@@ -449,12 +486,12 @@ export class Fonts extends Service {
         const url = file.url
         if (url.startsWith('https://fonts.googleapis.com/css')) {
           handle.files[index].finished = true
-          return this.googleFontsParser(url)
+          return this.googleFontsParser(url, 'fonts')
         }
         if (url.endsWith('/fonts.json')) {
           handle.files[index].finished = true
-          this.manifestParser(url, true).catch(err =>
-            this.ctx.logger.error('Font manifest processing failed:', err)
+          this.manifestParser(url, 'fonts', true).catch((err) =>
+            this.ctx.logger.error('Font manifest processing failed:', err),
           )
           return null
         }
@@ -602,7 +639,7 @@ export class Fonts extends Service {
         readable.removeAllListeners()
 
         if (!output.destroyed) {
-          await new Promise<void>(resolve => {
+          await new Promise<void>((resolve) => {
             output.end(async () => {
               output.destroy()
               await rm(tempFilePath)
@@ -693,11 +730,35 @@ export class Fonts extends Service {
               fileName: name,
               path,
               size: handle.downloaded,
-              descriptors: handle?.descriptors || {} as FontFaceDescriptors
+              descriptors: handle?.descriptors || {} as FontFaceDescriptors,
             })
           }
         }
       })
+    })
+  }
+
+  /**
+   * Removes all fonts associated with a specific source.
+   *
+   * @param sourceName - The name of the source to clear fonts from
+   */
+  async clear(sourceName: string) {
+    if (!isNonEmptyString(sourceName)) {
+      this.ctx.logger.warn('Invalid source name:', sourceName)
+      return
+    }
+    const source = sourceName?.trim()
+
+    await this.lock.withWriteLock(async () => {
+      const remove = this.fonts.filter(
+        (font) => font[Symbol.for('source')] === source,
+      )
+
+      if (!remove.length) return
+
+      this.fonts = this.fonts.filter((font) => font[Symbol.for('source')] !== source)
+      this.ctx.logger.info(`Removed ${remove.length} fonts with source: ${source}`)
     })
   }
 }
@@ -764,9 +825,9 @@ export namespace Fonts {
   }
 
   export type RegisterArgs =
-    | [fonts: Font[]]
-    | [family: string, folderPath: string, config?: RegisterConfig]
-    | [family: string, paths: string[], config?: RegisterConfig]
+    | [fonts: Font[], sourceName: string]
+    | [family: string, folderPath: string, sourceName: string, config?: RegisterConfig]
+    | [family: string, paths: string[], sourceName: string, config?: RegisterConfig]
 
   export interface RegisterConfig {
     parse?: boolean
@@ -774,20 +835,19 @@ export namespace Fonts {
   }
 
   export interface Register {
-
-    (family: string, folderPath: string, config?: RegisterConfig): Promise<void>
-    (family: string, paths: string[], config?: RegisterConfig): Promise<void>
-    (fonts: Font[]): Promise<void>
+    (family: string, folderPath: string, sourceName: string, config?: RegisterConfig): Promise<void>
+    (family: string, paths: string[], sourceName: string, config?: RegisterConfig): Promise<void>
+    (fonts: Font[], sourceName: string): Promise<void>
   }
 
   export interface GoogleFontRegister {
-    (url: string): Promise<void>
-    (urls: string[]): Promise<void>
+    (url: string, sourceName: string): Promise<void>
+    (urls: string[], sourceName: string): Promise<void>
   }
 
   export interface ManifestRegister {
-    (path: string): Promise<void>
-    (paths: string[]): Promise<void>
+    (path: string, sourceName: string): Promise<void>
+    (paths: string[], sourceName: string): Promise<void>
   }
 
   export const Config: z<Config> = z.object({

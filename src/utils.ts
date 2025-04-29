@@ -307,3 +307,7 @@ function isFontManifestOptions(obj: unknown): obj is Fonts.FontManifestOptions {
 
   return true
 }
+
+export function isNonEmptyString(str?: string | null): boolean {
+  return Boolean(str && str.trim().length > 0)
+}
