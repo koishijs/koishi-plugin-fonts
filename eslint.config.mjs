@@ -31,6 +31,6 @@ export default [
   ]
     .map((config) => ({
       ...config,
-      ignores: [...(config.ignores || []), "external/**", "temp/**", "dist/**", "lib/**", "**/*.mjs"],
+      ignores: [...(config.ignores || []), "external/**", "temp/**", "dist/**", "lib/**", "docs/**", "**/*.mjs"],
     })),
 ]
