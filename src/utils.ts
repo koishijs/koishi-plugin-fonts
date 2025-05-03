@@ -11,13 +11,34 @@ import { Fonts } from './font'
  * @returns List of merged fonts
  */
 export function mergeFonts(existingFonts: Fonts.Font[], newFonts: Fonts.Font[]): Fonts.Font[] {
-  const unique = newFonts.filter((font) =>
-    !existingFonts.some((f) => f.id === font.id),
-  )
-  const update = existingFonts.map((exist) =>
-    newFonts.find((font) => font.id === exist.id) || exist,
-  )
-  return [...update, ...unique]
+  const sourceSymbol = Symbol.for('source')
+
+  function getFontSource(font: Fonts.Font): any {
+    return sourceSymbol in font ? font[sourceSymbol] :
+      'source' in font ? (font as any).source : undefined
+  }
+
+  const result = [...existingFonts]
+
+  for (const newFont of newFonts) {
+    const existingIndex = result.findIndex(font => font.id === newFont.id)
+
+    if (existingIndex === -1) {
+      result.push(newFont)
+    } else {
+      const existingFont = result[existingIndex]
+      const existingSource = getFontSource(existingFont)
+      const newSource = getFontSource(newFont)
+
+      if (existingSource === undefined || newSource === undefined || existingSource === newSource) {
+        result[existingIndex] = newFont
+      } else {
+        result.push(newFont)
+      }
+    }
+  }
+
+  return result
 }
 
 /**
