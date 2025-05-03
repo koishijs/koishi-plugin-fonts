@@ -1,8 +1,18 @@
 {
   "name": "koishi-plugin-fonts",
   "description": "Font Manager for Koishi",
-  "version": "0.0.3",
-  "main": "lib/index.js",
+  "version": "0.0.4",
+  "main": "./lib/index.cjs",
+  "module": "./lib/index.js",
+  "exports": {
+    ".": {
+      "import": "./lib/index.js",
+      "require": "./lib/index.cjs"
+    },
+    "./package.json": "./package.json",
+    "./client/*": "./client/*",
+    "./lib/*": "./lib/*"
+  },
   "typings": "lib/index.d.ts",
   "type": "module",
   "files": [
@@ -23,7 +33,7 @@
     "Shigma <shigma10826@gmail.com>"
   ],
   "scripts": {
-    "build": "tsc -b && koishi-console build",
+    "build": "tsc -b && tsc -p tsconfig.cjs.json && koishi-console build",
     "lint": "eslint . --quiet",
     "docs:dev": "vitepress dev docs --open",
     "docs:build": "vitepress build docs",
