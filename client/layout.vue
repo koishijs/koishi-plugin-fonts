@@ -62,6 +62,8 @@ function groupByFamily(data) {
   return Object.values(grouped)
 }
 
+const activeNames = ref([])
+
 </script>
 
 <template>
@@ -93,37 +95,51 @@ function groupByFamily(data) {
 
       <!-- Download -->
       <template v-if="Object.keys(store.fonts.downloads).length">
-        <el-card class="mb-4">
-          <template #header>
-            <div class="text-bold">下载中</div>
-          </template>
-          <el-scrollbar class="fonts-list" ref="downloadsRef">
-            <template v-for="download in store.fonts.downloads">
-              <div class="mb-4">
-                <span class="mr-4">{{ download.name }}</span>
-                <el-button :disabled="disable(download)" :plain="disable(download)" @click="cancel(download.name, [])">
-                  取消
-                </el-button>
-              </div>
-              <el-row class="paths" v-for="file in download.files">
-                <el-col :span="2"></el-col>
-                <el-col :span="20">
-                  <el-progress class="file-progress"
-                               :percentage="percentage(file)"
-                               :indeterminate="indeterminate(file)"
-                               :status="status(file)" />
-                </el-col>
-                <el-col :span="2" class="button-container">
-                  <el-button @click="cancel(download.name, [file.url])"
-                             :disabled="disableOne(file)"
-                             :plain="disableOne(file)">
-                    取消
-                  </el-button>
-                </el-col>
-              </el-row>
+        <el-scrollbar class="downloads-scrollbar" ref="downloadsRef">
+          <el-card class="download-card">
+            <template #header>
+              <div class="text-bold">下载中</div>
             </template>
-          </el-scrollbar>
-        </el-card>
+            <div class="card-body">
+              <el-collapse :="activeNames">
+                <el-collapse-item  v-for="download in store.fonts.downloads"
+                                   :name="download.name"
+                                   :key="download.name"
+                                   :show-arrow="true"
+                                   @click="activeNames = [download.name]">
+                  <template #title>
+                    <div class="item-title paths">
+                      <span>{{ download.name }}</span>
+                      <el-button class="button-container"
+                                 :disabled="disable(download)"
+                                 :plain="disable(download)"
+                                 @click.stop="cancel(download.name, [])"
+                      >
+                        取消
+                      </el-button>
+                    </div>
+                  </template>
+                  <el-row class="paths" v-for="file in download.files">
+                    <el-col :span="4"></el-col>
+                    <el-col :span="16">
+                      <el-progress class="file-progress"
+                                   :percentage="percentage(file)"
+                                   :indeterminate="indeterminate(file)"
+                                   :status="status(file)" />
+                    </el-col>
+                    <el-col :span="4" class="button-container">
+                      <el-button @click="cancel(download.name, [file.url])"
+                                 :disabled="disableOne(file)"
+                                 :plain="disableOne(file)">
+                        取消
+                      </el-button>
+                    </el-col>
+                  </el-row>
+                </el-collapse-item>
+              </el-collapse>
+            </div>
+          </el-card>
+        </el-scrollbar>
       </template>
 
       <el-scrollbar class="fonts-list" ref="rootRef">
@@ -171,18 +187,58 @@ function groupByFamily(data) {
 
 <style lang="scss" scoped>
 .container {
-  max-width: 768px;
-  height: 100%;
-  margin: 0 auto;
+  max-width: 800px;
+  height: calc(100% - 30px);
+  display: flex;
+  margin-left: auto;
+  margin-right: auto;
+  flex-direction: column;
 }
 
-.container * {
-  box-sizing: border-box;
+.download-card {
+  :deep(.el-card__body) {
+    padding: 0;
+    height: 100%;
+  }
+}
+
+.card-body {
+
+}
+
+.item-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0 16px;
+  position: relative;
+
+  span {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-left: 0;
+  }
+
+  .button-container {
+    margin-left: auto;
+  }
+}
+
+.downloads-scrollbar {
+  width: 100%;
+  max-height:40%;
+  margin-bottom: 20px;
+}
+
+:deep(.el-table__expanded-cell) {
+  padding: 0;
 }
 
 .fonts-list {
   width: 100%;
-  height: 100%;
+  flex-grow: 1;
   overflow: auto;
 }
 
