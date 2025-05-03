@@ -153,10 +153,10 @@ export function apply(ctx: Context) {
 ```
 
 #### pptr环境注意事项
-1. 对于本地字体，需要使用 `pathToFileURL()` 来转换为 `file://` 协议的 URL，当然这一步 Fonts 插件已经做过了。
+1. 对于本地字体，需要使用 `pathToFileURL()` 来转换为 `file:///` 协议的 URL，当然这一步 Fonts 插件已经做过了。
 2. 字体描述符，即 `descriptors` 中的字段不能为 `null` 或者 `undefined`，否则会导致字体加载失败。
-3. v8 加载字体时，其请求头中的 `Rrigin` 会被置为 `null`，所以需要服务器返回的字体带有跨域头 `Access-Control-Allow-Origin: *`。
+3. v8 加载字体时，其请求头中的 `Origin` 会被置为 `null`，所以需要服务器返回的字体带有跨域头 `Access-Control-Allow-Origin: *`。
 4. `page.setContent()` 会替换整个页面上下文，要在其调用后再设置字体以及样式。
-5. 在页面中使用字体并且是通过样式指定字体时，需要等待字体加载完成后再进行渲染。
+5. 在页面中使用字体并且是通过**样式**指定字体时，需要等待字体加载完成后再进行渲染。
 6. 要在 `canvas` 中使用字体，需要先在页面上下文中注册好字体。
 7. `canvas` 渲染前，需要手动加载字体，这里推荐使用 `document.fonts.load()` 来加载字体，它会自动寻找符合 `unicode range` 的字体文件并加载。当然，你也可以在 `document.fonts.add(fontFace)` 之后就执行 `fontFace.load()` 直接将字体加载好。
