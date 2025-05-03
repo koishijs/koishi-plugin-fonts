@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-fonts",
   "description": "Font Manager for Koishi",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "type": "module",
@@ -50,7 +50,7 @@
   "koishi": {
     "description": {
       "en": "Font Manager for Koishi",
-      "zh": "适用于 Koishi 的字体管理器"
+      "zh": "Koishi 的字体管理器"
     },
     "preview": true,
     "implements": [
