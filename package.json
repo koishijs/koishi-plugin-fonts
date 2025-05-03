@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-fonts",
   "description": "Font Manager for Koishi",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "main": "./lib/index.cjs",
   "module": "./lib/index.js",
   "exports": {
@@ -10,7 +10,7 @@
       "require": "./lib/index.cjs"
     },
     "./package.json": "./package.json",
-    "./client/*": "./client/*",
+    "./dist/*": "./dist/*",
     "./lib/*": "./lib/*"
   },
   "typings": "lib/index.d.ts",
