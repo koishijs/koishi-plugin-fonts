@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { send, store } from '@koishijs/client'
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import type {} from 'element-plus'
 import type {} from '../lib'
 
@@ -64,13 +64,37 @@ function groupByFamily(data) {
 
 const activeNames = ref([])
 
+const filteredFonts = computed(() => {
+  const searchTerm = keyword.value.trim().toLowerCase()
+
+  if (!searchTerm) {
+    return groupByFamily(store.fonts.fonts)
+  }
+
+  const filteredFonts = store.fonts.fonts.filter((font) => {
+    return (
+      font.family?.toLowerCase().includes(searchTerm) ||
+      font.fileName?.toLowerCase().includes(searchTerm) ||
+      font.path?.toLowerCase().includes(searchTerm) ||
+      font.format?.toLowerCase().includes(searchTerm) ||
+      font.id?.toLowerCase().includes(searchTerm)
+    )
+  })
+
+  return groupByFamily(filteredFonts)
+})
+
 </script>
 
 <template>
   <k-layout>
     <div class="container">
       <div class="my-4 flex items-center px-4">
-        <el-input class="flex-1" v-model="keyword" placeholder="输入关键词搜索…" #suffix>
+        <el-input class="flex-1"
+                  v-model="keyword"
+                  clearable
+                  placeholder="输入关键词搜索…"
+                  #suffix>
           <k-icon name="search" />
         </el-input>
 
@@ -100,21 +124,20 @@ const activeNames = ref([])
             <template #header>
               <div class="text-bold">下载中</div>
             </template>
-            <div class="card-body">
-              <el-collapse :="activeNames">
-                <el-collapse-item  v-for="download in store.fonts.downloads"
-                                   :name="download.name"
-                                   :key="download.name"
-                                   :show-arrow="true"
-                                   @click="activeNames = [download.name]">
+            <div>
+              <el-collapse v-model="activeNames">
+                <el-collapse-item v-for="download in store.fonts.downloads"
+                                  :name="download.name"
+                                  :key="download.name"
+                                  :show-arrow="true"
+                                  @click="activeNames = [download.name]">
                   <template #title>
                     <div class="item-title paths">
                       <span>{{ download.name }}</span>
                       <el-button class="button-container"
                                  :disabled="disable(download)"
                                  :plain="disable(download)"
-                                 @click.stop="cancel(download.name, [])"
-                      >
+                                 @click.stop="cancel(download.name, [])">
                         取消
                       </el-button>
                     </div>
@@ -143,12 +166,12 @@ const activeNames = ref([])
       </template>
 
       <el-scrollbar class="fonts-list" ref="rootRef">
-        <template v-if="store.fonts.fonts.length === 0">
-          <el-empty description="暂无字体" />
+        <template v-if="filteredFonts.length === 0">
+          <el-empty :description="keyword.trim() ? '未找到字体' : '暂无字体'" />
         </template>
 
-        <el-table v-if="store.fonts.fonts.length !== 0"
-                  :data="groupByFamily(store.fonts.fonts)"
+        <el-table v-if="filteredFonts.length !== 0"
+                  :data="filteredFonts"
                   row-kay="family"
                   class="fonts-list"
                   ref="rootRef"
@@ -200,10 +223,6 @@ const activeNames = ref([])
     padding: 0;
     height: 100%;
   }
-}
-
-.card-body {
-
 }
 
 .item-title {
