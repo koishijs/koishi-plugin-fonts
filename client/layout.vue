@@ -129,8 +129,7 @@ const filteredFonts = computed(() => {
                 <el-collapse-item v-for="download in store.fonts.downloads"
                                   :name="download.name"
                                   :key="download.name"
-                                  :show-arrow="true"
-                                  @click="activeNames = [download.name]">
+                                  :show-arrow="true">
                   <template #title>
                     <div class="item-title paths">
                       <span>{{ download.name }}</span>
@@ -173,7 +172,7 @@ const filteredFonts = computed(() => {
         <el-table v-if="filteredFonts.length !== 0"
                   :data="filteredFonts"
                   row-kay="family"
-                  class="fonts-list"
+                  class="fonts-list is-always-shadow"
                   ref="rootRef"
                   border>
           <el-table-column type="expand">
