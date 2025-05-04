@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-fonts",
   "description": "Font Manager for Koishi",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "main": "./lib/index.cjs",
   "module": "./lib/index.js",
   "exports": {
@@ -47,7 +47,7 @@
   "bugs": {
     "url": "https://github.com/koishijs/koishi-plugin-fonts/issues"
   },
-  "homepage": "https://github.com/koishijs/koishi-plugin-fonts",
+  "homepage": "https://fonts.koishi.chat",
   "keywords": [
     "bot",
     "chatbot",
@@ -62,7 +62,6 @@
       "en": "Font Manager for Koishi",
       "zh": "Koishi 的字体管理器"
     },
-    "preview": true,
     "implements": [
       "fonts"
     ],
