@@ -60,7 +60,7 @@ Manifest 中的 `type` 字段指定了字体的来源，`google` 表示 Google F
 
 :::
 
-```json
+```json title=fonts.json
 {
   "version": "1.0",
   "fonts": {
@@ -119,7 +119,10 @@ Manifest 中的 `type` 字段指定了字体的来源，`google` 表示 Google F
 
 
 ### 使用字体
-这里以 [浏览器 (Puppeteer)]([./plugins/puppeteer.md](https://puppeteer.koishi.chat/)) 插件为例，使用其已经集成了 Fonts 服务的 API 来使用字体。
+
+在跨域环境使用外部资源有非常多的限制，为了方便使用字体，已经在 [浏览器 (Puppeteer)]([./plugins/puppeteer.md](https://puppeteer.koishi.chat/)) 插件内集成了 Fonts 服务的 API。
+
+#### 使用 pptr 插件
 
 ```ts
 // ...其他依赖
@@ -152,7 +155,107 @@ export function apply(ctx: Context) {
 }
 ```
 
-#### pptr环境注意事项
+#### 自己动手！
+
+这里以 [`ba-logo`](https://github.com/SaarChaffee/koishi-plugin-ba-logo) 插件为例。
+
+```ts title=index.ts
+// ...其他依赖
+import type {} from 'koishi-plugin-fonts'
+
+export const name = 'ba-logo'
+
+export const inject = ['puppeteer', 'fonts']
+
+function normalize(...file: string[]) {
+  return posix.normalize(resolve(...file))
+}
+
+export function apply(ctx: Context) {
+  // ...其他代码
+
+  ctx.fonts.manifestRegister(
+    resolve(__dirname, '../public/fonts/fonts.json'),
+    name
+  )
+
+  ctx
+    // ...其他代码
+    .action(async ({ session, options }, textL, textR) => {
+      const page = await session.app.puppeteer.browser.newPage()
+
+      await page.goto(
+          `file:///${normalize(__dirname, '../public/index.html')}`,
+          { waitUntil: 'networkidle0' }
+        )
+
+      const fonts = await session.app.fonts
+        .getFonts(['GlowSansSC-Normal-Heavy_diff', 'RoGSanSrfStd-Bd'])
+
+      // 通过 `page.evaluate()` 调用 FontFace API 注入字体
+      // 注意 pptr 的 evaluate 是隔离的执行环境，需要通过参数传递数据
+      await Promise.all(fonts.map(async (font) => {
+          await page.evaluate((font) => {
+            const fontFace = new FontFace(
+              font.family,
+              `url(${font.path}) format('${font.format}')`,
+              font.descriptors,
+            )
+            document.fonts.add(fontFace)
+          }, font)
+        }))
+
+      await page.evaluate(async (inputs: Inputs, config: BALogoConstructor) => {
+        const ba = new BALogo(config)
+        await ba.draw(inputs)
+      },
+        { textL: results[0].msg, textR: results[1].msg },
+        { options, config: ctx.config }
+      )
+
+      // ...其他代码
+
+      await page.close()
+
+    })
+
+  ctx.on('dispose', () => {
+    ctx.fonts.clear(name)
+  })
+}
+```
+
+```ts title=balogo.ts
+export class BALogo {
+
+  // ...其他代码
+
+  async draw({ textL, textR }: Inputs) {
+    const canvas = document.querySelector('#canvas') as HTMLCanvasElement
+    const ctx = canvas.getContext('2d')
+
+    // ...其它代码
+
+    // 在上下文加载要用到的字体，这里直接把所有字符传进去
+    // load() 方法会自动寻找符合 unicode range 的字体文件并加载
+    await document.fonts.load(
+      this.font,
+      textL + textR
+    )
+
+    // ...其它代码
+
+    ctx.font = this.font
+    ctx.fillStyle = '#128AFA'
+    ctx.fillText(textL, this.canvasWidthL, canvas.height * this.textBaseLine)
+
+    // ...其它代码
+
+  }
+}
+```
+
+#### 注意事项
 1. 对于本地字体，需要使用 `pathToFileURL()` 来转换为 `file:///` 协议的 URL，当然这一步 Fonts 插件已经做过了。
 2. 字体描述符，即 `descriptors` 中的字段不能为 `null` 或者 `undefined`，否则会导致字体加载失败。
 3. v8 加载字体时，其请求头中的 `Origin` 会被置为 `null`，所以需要服务器返回的字体带有跨域头 `Access-Control-Allow-Origin: *`。
