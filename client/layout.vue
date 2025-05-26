@@ -120,7 +120,7 @@ const filteredFonts = computed(() => {
       <!-- Download -->
       <template v-if="Object.keys(store.fonts.downloads).length">
         <el-scrollbar class="downloads-scrollbar" ref="downloadsRef">
-          <el-card class="download-card">
+          <el-card class="download-card" shadow="never">
             <template #header>
               <div class="text-bold">下载中</div>
             </template>
