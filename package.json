@@ -2,6 +2,7 @@
   "name": "@root/fonts",
   "version": "0.0.0",
   "private": true,
+  "packageManager": "yarn@4.8.1",
   "workspaces": [
     "packages/*"
   ],
@@ -37,7 +38,8 @@
     "yakumo-tsc": "^3.0.1",
     "yakumo-upgrade": "^0.3.6",
     "yakumo-version": "^0.3.4",
-    "yml-register": "^1.2.5"
+    "yml-register": "^1.2.5",
+    "@koishijs/plugin-console": "^5.30.7"
   },
   "peerDependencies": {
     "@koishijs/plugin-console": "^5.30.7"
