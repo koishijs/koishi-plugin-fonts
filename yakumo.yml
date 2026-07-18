@@ -6,8 +6,9 @@
         - esbuild
 - name: yakumo-esbuild
 - name: yakumo-tsc
-- name: yakumo/run
 - name: yakumo-publish-sync
 - name: yakumo/publish
 - name: yakumo/prepare
 - name: yakumo/upgrade
+- name: yakumo/version
+- name: yakumo/run

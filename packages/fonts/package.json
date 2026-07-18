@@ -1,0 +1,79 @@
+{
+  "name": "koishi-plugin-fonts",
+  "description": "Font Manager for Koishi",
+  "version": "1.0.2",
+  "main": "./lib/index.cjs",
+  "module": "./lib/index.js",
+  "exports": {
+    ".": {
+      "import": "./lib/index.js",
+      "require": "./lib/index.cjs"
+    },
+    "./package.json": "./package.json",
+    "./dist/*": "./dist/*",
+    "./lib/*": "./lib/*"
+  },
+  "types": "lib/index.d.ts",
+  "type": "module",
+  "files": [
+    "lib",
+    "dist"
+  ],
+  "author": {
+    "name": "SaarChaffee",
+    "email": "saarchaffee@qq.com",
+    "url": "https://github.com/SaarChaffee"
+  },
+  "maintainers": [
+    {
+      "name": "Maiko Tan",
+      "email": "maiko.tan.coding@gmail.com",
+      "url": "https://github.com/MaikoTan"
+    },
+    "Shigma <shigma10826@gmail.com>"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/koishijs/koishi-plugin-fonts.git",
+    "directory": "packages/fonts"
+  },
+  "bugs": {
+    "url": "https://github.com/koishijs/koishi-plugin-fonts/issues"
+  },
+  "homepage": "https://fonts.koishi.chat",
+  "keywords": [
+    "bot",
+    "chatbot",
+    "koishi",
+    "plugin",
+    "font",
+    "storage",
+    "text"
+  ],
+  "koishi": {
+    "description": {
+      "en": "Font Manager for Koishi",
+      "zh": "Koishi 的字体管理器"
+    },
+    "implements": [
+      "fonts"
+    ],
+    "services": {
+      "required": [
+        "database"
+      ],
+      "optional": [
+        "console"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "koishi": "^4.18.7"
+  },
+  "dependencies": {
+    "@koishijs/client": "^5.30.7",
+    "@koishijs/console": "^5.30.7",
+    "sanitize-filename": "^1.6.3"
+  }
+}

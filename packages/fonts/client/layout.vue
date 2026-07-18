@@ -271,4 +271,38 @@ const filteredFonts = computed(() => {
 .paths:hover .button-container {
   opacity: 1;
 }
+
+.el-table--border {
+  border-radius: 4px 4px;
+  overflow: hidden;
+}
+
+.el-table__header-wrapper {
+  th:first-child {
+    border-top-left-radius: 4px;
+    // border-radius: 4px;
+    border-top-right-radius: 4px;
+  }
+
+  th:last-child {
+    border-top-right-radius: 4px;
+  }
+}
+
+.el-table:not(.el-table--border) .el-table__empty-block {
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.el-table__body-wrapper {
+  tbody tr:last-child {
+    td:first-child {
+      border-bottom-left-radius: 4px;
+    }
+
+    td:last-child {
+      border-bottom-right-radius: 4px;
+    }
+  }
+}
 </style>

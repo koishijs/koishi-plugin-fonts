@@ -1,22 +1,9 @@
 {
+  "extends": "./tsconfig.base",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "lib",
-    "target": "es2022",
-    "module": "ESNext",
-    "declaration": true,
-    "composite": true,
-    "incremental": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "moduleResolution": "Bundler",
-    "strictBindCallApply": true,
-    "emitDeclarationOnly": true,
-    "jsx": "react-jsx",
-    "jsxImportSource": "@satorijs/element",
-    "types": ["node", "yml-register/types"]
-  },
-  "include": [
-    "src",
-  ],
+    "baseUrl": ".",
+    "paths": {
+      "koishi-plugin-*": ["packages/*/src"]
+    }
+  }
 }
