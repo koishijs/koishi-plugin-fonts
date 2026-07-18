@@ -21,6 +21,7 @@
     "@cordisjs/vitepress": "^4.1.3",
     "@haixee/eslint-config": "^2.1.11",
     "@koishijs/client": "^5.30.7",
+    "@koishijs/plugin-console": "^5.30.7",
     "@types/node": "^20.17.30",
     "@typescript-eslint/parser": "^8.29.1-alpha.2",
     "esbuild": "^0.25.2",
@@ -38,8 +39,7 @@
     "yakumo-tsc": "^3.0.1",
     "yakumo-upgrade": "^0.3.6",
     "yakumo-version": "^0.3.4",
-    "yml-register": "^1.2.5",
-    "@koishijs/plugin-console": "^5.30.7"
+    "yml-register": "^1.2.5"
   },
   "peerDependencies": {
     "@koishijs/plugin-console": "^5.30.7"
