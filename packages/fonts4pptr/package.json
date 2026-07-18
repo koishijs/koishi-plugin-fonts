@@ -1,0 +1,58 @@
+{
+  "name": "koishi-plugin-fonts4pptr",
+  "description": "Puppeteer adapter for koishi-plugin-fonts",
+  "version": "1.0.0",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib"
+  ],
+  "author": {
+    "name": "SaarChaffee",
+    "email": "saarchaffee@qq.com",
+    "url": "https://github.com/SaarChaffee"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/koishijs/koishi-plugin-fonts.git",
+    "directory": "packages/fonts4pptr"
+  },
+  "bugs": {
+    "url": "https://github.com/koishijs/koishi-plugin-fonts/issues"
+  },
+  "keywords": [
+    "bot",
+    "chatbot",
+    "koishi",
+    "plugin",
+    "font",
+    "puppeteer"
+  ],
+  "koishi": {
+    "description": {
+      "en": "Puppeteer adapter for koishi-plugin-fonts",
+      "zh": "koishi-plugin-fonts 的 Puppeteer 适配器"
+    },
+    "implements": [
+      "fonts4pptr"
+    ],
+    "services": {
+      "required": [
+        "fonts",
+        "puppeteer"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "koishi": "^4.18.7",
+    "koishi-plugin-fonts": "^1.0.0",
+    "koishi-plugin-puppeteer": "^3.8.0"
+  },
+  "devDependencies": {
+    "@koishijs/canvas": "^0.2.0",
+    "koishi-plugin-fonts": "^1.0.2",
+    "koishi-plugin-puppeteer": "^3.8.0",
+    "puppeteer-core": "^22.5.0"
+  }
+}
