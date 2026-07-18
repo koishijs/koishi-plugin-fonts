@@ -825,9 +825,9 @@ export namespace Fonts {
   }
 
   export type RegisterArgs =
-    | [fonts: Font[], sourceName: string]
-    | [family: string, folderPath: string, sourceName: string, config?: RegisterConfig]
-    | [family: string, paths: string[], sourceName: string, config?: RegisterConfig]
+    [fonts: Font[], sourceName: string] |
+    [family: string, folderPath: string, sourceName: string, config?: RegisterConfig] |
+    [family: string, paths: string[], sourceName: string, config?: RegisterConfig]
 
   export interface RegisterConfig {
     parse?: boolean

@@ -23,6 +23,7 @@
     "@koishijs/client": "^5.30.7",
     "@koishijs/plugin-console": "^5.30.7",
     "@types/node": "^20.17.30",
+    "@typescript-eslint/eslint-plugin": "^8.64.0",
     "@typescript-eslint/parser": "^8.29.1-alpha.2",
     "esbuild": "^0.25.2",
     "esbuild-register": "^3.6.0",

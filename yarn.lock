@@ -2176,6 +2176,7 @@ __metadata:
     "@koishijs/client": "npm:^5.30.7"
     "@koishijs/plugin-console": "npm:^5.30.7"
     "@types/node": "npm:^20.17.30"
+    "@typescript-eslint/eslint-plugin": "npm:^8.64.0"
     "@typescript-eslint/parser": "npm:^8.29.1-alpha.2"
     esbuild: "npm:^0.25.2"
     esbuild-register: "npm:^3.6.0"
@@ -2766,7 +2767,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@typescript-eslint/eslint-plugin@npm:8.64.0":
+"@typescript-eslint/eslint-plugin@npm:8.64.0, @typescript-eslint/eslint-plugin@npm:^8.64.0":
   version: 8.64.0
   resolution: "@typescript-eslint/eslint-plugin@npm:8.64.0"
   dependencies:

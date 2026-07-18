@@ -1,6 +1,7 @@
 import haixee from '@haixee/eslint-config'
 
 export default [
+  { ignores: ["docs/.vitepress/cache/**"] },
   ...[
     ...[
       ...haixee.configs.base,
@@ -12,7 +13,7 @@ export default [
       })
       .map((config) => ({
         ...config,
-        files: [...(config.files || []), "src/*.ts", "client/*.ts"],
+        files: ["packages/fonts/src/*.ts", "packages/fonts/client/*.ts"],
       })),
     ...haixee.configs.vue
       .filter((config) => {
@@ -26,11 +27,11 @@ export default [
       })
       .map((config) => ({
         ...config,
-        files: [...(config.files || []), "client/*.vue"],
+        files: ["packages/fonts/client/*.vue"],
       }))
   ]
     .map((config) => ({
       ...config,
-      ignores: [...(config.ignores || []), "external/**", "temp/**", "dist/**", "lib/**", "docs/**", "**/*.mjs", "**/icon.vue"],
+      ignores: [...(config.ignores || []), "external/**", "temp/**", "dist/**", "lib/**", "docs/**", "**/*.mjs", "**/icon.vue", "**/*.d.ts", "packages/*/lib/**", "docs/.vitepress/cache/**"],
     })),
 ]
