@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-fonts4pptr",
   "description": "Puppeteer adapter for koishi-plugin-fonts",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
@@ -29,10 +29,6 @@
     "font",
     "puppeteer"
   ],
-  "publishConfig": {
-    "provenance": true,
-    "access": "public"
-  },
   "koishi": {
     "description": {
       "en": "Puppeteer adapter for koishi-plugin-fonts",
