@@ -59,6 +59,7 @@ jobs:
 
       - name: Set Publish Config
         run: |
+          yarn config set npmPublishProvenance true
           yarn config set npmRegistryServer https://registry.npmjs.org/
 
       - name: Publish

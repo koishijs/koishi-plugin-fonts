@@ -2,7 +2,7 @@
   "name": "@root/fonts",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "yarn@4.8.1",
+  "packageManager": "yarn@4.17.1",
   "workspaces": [
     "packages/*"
   ],
