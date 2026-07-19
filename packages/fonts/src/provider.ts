@@ -8,6 +8,7 @@ import type { Context } from 'koishi'
 
 export class Provider extends DataService<Provider.Payload> {
   downloads: Record<string, Provider.Download> = {}
+  private timers = new Set<NodeJS.Timeout>()
 
   constructor(ctx: Context, private fonts: Fonts) {
     super(ctx, 'fonts')
@@ -47,6 +48,7 @@ export class Provider extends DataService<Provider.Payload> {
         // TODO: need a bettle handle when some are failure, some are finished
         if (handle.files.every((file) => file.failure)) {
           clearInterval(timer)
+          this.timers.delete(timer)
           delete this.downloads[name]
           await this.refresh(true)
         }
@@ -56,12 +58,14 @@ export class Provider extends DataService<Provider.Payload> {
             .every((file) => file.finished)
         ) {
           clearInterval(timer)
+          this.timers.delete(timer)
           setTimeout(async () => {
             delete this.downloads[name]
             await this.refresh(true)
           }, 2000)
         }
       }, 1000)
+      this.timers.add(timer)
       Object.defineProperty(this.downloads[name], 'timer', { value: timer })
     })
     ctx.console.addListener('fonts/cancel', async (name, urls) => {
@@ -80,8 +84,10 @@ export class Provider extends DataService<Provider.Payload> {
         ) {
           ctx.logger.info('cancel success', name)
           clearInterval(timer)
+          this.timers.delete(timer)
           if (!urls.length) {
             clearInterval(this.downloads[name]['timer'])
+            this.timers.delete(this.downloads[name]['timer'])
             delete this.downloads[name]
           }
           else {
@@ -92,9 +98,11 @@ export class Provider extends DataService<Provider.Payload> {
         }
         else if (count > 5) {
           clearInterval(timer)
+          this.timers.delete(timer)
         }
         count++
       }, 1000)
+      this.timers.add(timer)
     })
   }
 
@@ -103,6 +111,19 @@ export class Provider extends DataService<Provider.Payload> {
       downloads: this.downloads,
       fonts: await this.fonts.list(),
     }
+  }
+
+  /**
+   * Clean up side effects when the service is disposed.
+   * Clears all active timers and cancels pending downloads.
+   */
+  async stop() {
+    // Clear all polling timers
+    for (const timer of this.timers) {
+      clearInterval(timer)
+    }
+    this.timers.clear()
+    this.downloads = {}
   }
 }
 

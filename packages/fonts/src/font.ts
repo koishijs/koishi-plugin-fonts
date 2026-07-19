@@ -24,6 +24,8 @@ export class Fonts extends Service {
   private root: string
   private lock: ReadWriteLock
   private fonts: Fonts.Font[]
+  private abortControllers = new Set<AbortController>()
+  private tempFiles = new Set<string>()
 
   constructor(ctx: Context, public config: Fonts.Config) {
     super(ctx, 'fonts')
@@ -539,6 +541,7 @@ export class Fonts extends Service {
 
     const family = name
     const controller = new AbortController()
+    this.abortControllers.add(controller)
     const { signal } = controller
     const { data, headers } = await this.ctx.http<ReadableStream>(url, { responseType: 'stream', signal })
     const hash = createHash('sha256', { emitClose: false })
@@ -559,6 +562,7 @@ export class Fonts extends Service {
     }
     const tempFilePath = resolve(this.root, folderName,
       `${name}.${Date.now()}-${Math.random().toString(36).substring(2, 10)}.tmp`)
+    this.tempFiles.add(tempFilePath)
     const output = createWriteStream(tempFilePath)
     let format: Fonts.Font['format']
     /*
@@ -631,6 +635,8 @@ export class Fonts extends Service {
       const cleanup = async (reason: string) => {
         if (cleanupExecuted) return
         cleanupExecuted = true
+        this.abortControllers.delete(controller)
+        this.tempFiles.delete(tempFilePath)
         readable.unpipe(output)
         readable.unpipe(hash)
 
@@ -723,6 +729,8 @@ export class Fonts extends Service {
           else {
             this.ctx.logger.info('Download finished successfully', name, sha256, path)
             handle.finished = true
+            this.abortControllers.delete(controller)
+            this.tempFiles.delete(tempFilePath)
             _resolve({
               id: sha256,
               family,
@@ -760,6 +768,30 @@ export class Fonts extends Service {
       this.fonts = this.fonts.filter((font) => font[Symbol.for('source')] !== source)
       this.ctx.logger.info(`Removed ${remove.length} fonts with source: ${source}`)
     })
+  }
+
+  /**
+   * Clean up side effects when the service is disposed.
+   * Aborts all active downloads and removes temporary files.
+   */
+  async stop() {
+    // Abort all active downloads
+    for (const controller of this.abortControllers) {
+      controller.abort()
+    }
+    this.abortControllers.clear()
+
+    // Clean up any leftover temporary files
+    await Promise.allSettled(
+      [...this.tempFiles].map(async (path) => {
+        try {
+          await rm(path)
+        } catch (err) {
+          this.ctx.logger.warn(`Failed to clean up temp file: ${path}`, err.message)
+        }
+      }),
+    )
+    this.tempFiles.clear()
   }
 }
 
