@@ -29,6 +29,10 @@
     "font",
     "puppeteer"
   ],
+  "publishConfig": {
+    "provenance": true,
+    "access": "public"
+  },
   "koishi": {
     "description": {
       "en": "Puppeteer adapter for koishi-plugin-fonts",
